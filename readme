@@ -1,0 +1,14 @@
+configure MR430 to match MR310
+test homing
+add LCD or 2 LCDs
+DIN rail // cutting board
+pullup / pulldown resistors
+
+wait for 5 from keyboard
+>> send 5 to eprime
+>> HIGH to homingPin_R & homingPin_L >> delay >> LOW
+>> begin txt / csv
+>> >> read values into file
+>> close file
+repeat x2
+
