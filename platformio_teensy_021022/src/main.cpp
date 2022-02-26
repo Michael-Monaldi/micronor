@@ -1,41 +1,11 @@
-#include <Arduino.h>
+//#include <Arduino.h>
 // Libraries for the Adafruit RGB/LCD Shield
-
-#include <Wire.h>
 #include <Adafruit_RGBLCDShield.h>
-#include <utility/Adafruit_MCP23017.h>
-// The shield uses the I2C SCL and SDA pins. On classic Arduinos
-// this is Analog 4 and 5 so you can't use those for analogRead() anymore
-// However, you can connect other I2C sensors to the I2C bus and share I2C bus
-// These #defines make it easy to set the backlight color
-#define RED 0x1
-#define YELLOW 0x3
-#define GREEN 0x2
-#define TEAL 0x6
-#define BLUE 0x4
-#define VIOLET 0x5
-//#define WHITE 0x7
-#define BUTTON_SHIFT BUTTON_SELECT
-// define the degree symbol
-const char symDegree = 223;
-const char symU = 94;
-const char symD = 118;
-const char symL = 127;
-const char symR = 126;
-byte symDown[8] = {
-        B00000,
-        B00000,
-        B00000,
-        B00000,
-        B00000,
-        B10001,
-        B01010,
-        B00100};
-Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
-#define MENU_DELAY 1500
-#define bounciness 150
+#include <Wire.h>
+
 // So we can save and retrieve settings
 #include <EEPROM.h>
+
 #include <TimeLib.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
@@ -87,7 +57,7 @@ boolean errorState = false;
 
 unsigned long lastInput = 0; // last button press
 const int logInterval = 10000; // log every 10 seconds
-uint32_t logStartTime;
+uint32_t log_tzero_msec;
 uint32_t logTime;
 
 
@@ -97,23 +67,18 @@ uint32_t logTime;
 // ************************************************
 enum operatingState { OFF = 0, SET_SUB, SET_SES, SET_RUN, SET_DATE, SET_TIME, SET_VERIFY, WAIT_TRIGGER, LOG_DATA, ERROR_INFO};
 operatingState opState = OFF;
-
 double SubjectID = 1;
 double Session = 1;
 int SID = 1;
 int SES = 1;
-int RUN_N = 1;
-double DATE = 3;
 double TIME = 5;
-
+double DATE = 3;
+int RUN_N = 1;
 int increment = 1;
 char sBuffer[100];
-const char *opName[] = {"OFF", "set1 ", "run ", "ppp ", "iiii ", "dddd", "7sec"};
 String opString = F("null");
 String outString = F("empty");
 int opVar = 0;
-
-
 // ************************************************
 // Pin definitions
 // ************************************************
@@ -136,7 +101,6 @@ uint16_t adcdeg430 = 90;
 int deg310 = 31;
 int deg430 = 43;
 int paramsSaved = 0;
-
 // ************************************************
 // Display Variables and constants
 // ************************************************
@@ -150,6 +114,38 @@ int paramsSaved = 0;
 #define LOGO_WIDTH    16
 //unsigned long ttt = 1551500792;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire1, OLED_RESET);
+// These #defines make it easy to set the backlight color
+#define RED 0x1
+#define YELLOW 0x3
+#define GREEN 0x2
+#define TEAL 0x6
+#define BLUE 0x4
+#define VIOLET 0x5
+// define the degree symbol
+byte degree[8] = {B00110, B01001, B01001, B00110, B00000, B00000, B00000, B00000};
+byte arrowUp[8] = {
+        B00100,
+        B01110,
+        B10101,
+        B00100,
+        B00100,
+        B00100,
+        B00100,
+        B00100};
+byte arrowDown[8] = {
+        B00100,
+        B00100,
+        B00100,
+        B00100,
+        B00100,
+        B10101,
+        B01110,
+        B00100};
+Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
+#define MENU_DELAY 1500
+#define bounciness 150
+// #define WHITE 0x7
+// #define BUTTON_SELECT BUTTON_SELECT
 
 // ************************************************
 //Filenaming and lcd display vars
@@ -161,26 +157,39 @@ char tLong[40];
 char tShort[40];
 String errorCondition = " All  is  well !!!  ";
 u_int32_t errorValue = 0;
-
+uint32_t logTimeStamp = 9;
+u_int32_t iii=0;
 // ************************************************
 // SD Card Logging Setup
 // ************************************************
-#include "SD.h"// new
-//#include "SdFat.h"//old
+//#include "SD.h"// new
+#include "SdFat.h"
 #include "RingBuf.h"
 // Use Teensy SDIO
-//#define SD_CONFIG SdioConfig(FIFO_SDIO)//old
-#define SD_CONFIG SdioConfig(BUILTIN_SDCARD)//new
-// Interval between points for 25 ksps.
-#define LOG_INTERVAL_USEC 500000
+#define SD_CONFIG SdioConfig(FIFO_SDIO)
+//#define SD_CONFIG SdioConfig(BUILTIN_SDCARD)//new
+
+// Interval between points for 7.69230769 Hz = period of 130000 uSec
+#define LOG_INTERVAL_USEC 130000
 // Size to log 10 byte lines at 2.5 kHz for more than ten minutes.
-#define LOG_FILE_SIZE 10*2500*600  // 150,000,000 bytes.
+#define LOG_FILE_SIZE 10*2500*600  // 15,000,000 bytes.
 // Space to hold more than 800 ms of data for 10 byte lines at 25 ksps.
-#define RING_BUF_CAPACITY 100*512
+#define RING_BUF_CAPACITY 400*512
 SdFs sd;
 FsFile file;
 // RingBuf for File type FsFile.
 RingBuf<FsFile, RING_BUF_CAPACITY> rb;
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -208,6 +217,7 @@ uint8_t ReadButtons()
 void LogData()
 {
    // strcpy(LOG_FILENAME, "sub-000_ses-0_run-0.csv");
+   
    lcd.setCursor(0, 0);  
    lcd.print(F("Logging"));
    lcd.print(" ");
@@ -215,17 +225,17 @@ void LogData()
    lcd.setCursor(11, 0);
    lcd.print(tShort);
    lcd.print(" ");
-   lcd.setCursor(7, 1);  lcd.print((char) symDegree);
-   lcd.setCursor(18, 1); lcd.print((char) symDegree);
-   lcd.setCursor(0, 1);
-   lcd.print("L: "); lcd.print(adcdeg310); lcd.print("  ");
-   lcd.setCursor(11, 1);
-   lcd.print("R: "); lcd.print(adcdeg430); lcd.print("  ");
+   lcd.setCursor(7, 1);  lcd.write(1);
+   lcd.setCursor(18, 1); lcd.write(1);
+   lcd.setCursor(0, 1);  lcd.print("L:"); lcd.print(adcdeg310); lcd.print("  ");
+   lcd.setCursor(11, 1); lcd.print("R:"); lcd.print(adcdeg430); lcd.print("  ");
    lcd.setCursor(0, 3);
    lcd.print(MM_BASE);
-   lcd.setCursor(0, 2);
-   lcd.print(logStartTime);
-   lcd.print(" ");
+   lcd.setCursor(0, 0);
+   lcd.print("t0:");
+   lcd.print(log_tzero_msec);
+   lcd.print(" ms");
+   
    
    // initialize the RingBuf.
    rb.begin(&file);
@@ -235,7 +245,8 @@ void LogData()
    int32_t minSpareMicros = INT32_MAX;
    // Start time.
    logTime = micros();
-     
+   
+      // Log data until BUTTONS or file full.
    while (!Serial.available())
    {
       // Amount of data in ringBuf.
@@ -243,7 +254,7 @@ void LogData()
 
       if ((n + file.curPosition()) > (LOG_FILE_SIZE - 20)) {
          errorCondition = "File full - EXITING ";
-         errorValue = 242;
+         errorValue = 257;
          lcd.clear();
          lcd.setCursor(0,1);  lcd.print(errorCondition);  lcd.setCursor(0,2);  lcd.print(errorValue);
          opState = ERROR_INFO;
@@ -258,7 +269,7 @@ void LogData()
          // Write one sector from RingBuf to file.
          if (512 != rb.writeOut(512)) {
             errorCondition = "RB writeOut Failed";
-            errorValue = 257;
+            errorValue = 273;
             lcd.clear();
             lcd.setCursor(0,1);  lcd.print(errorCondition);  lcd.setCursor(0,2);  lcd.print(errorValue);
             opState = ERROR_INFO;
@@ -269,95 +280,91 @@ void LogData()
       // Time for next point.
       logTime += LOG_INTERVAL_USEC;
       int32_t spareMicros = logTime - micros();
+      logTimeStamp = ( (logTime/1000) - log_tzero_msec );
+      iii++;
+      
       if (spareMicros < minSpareMicros) {
            minSpareMicros = spareMicros;
       }
       if (spareMicros <= 0) {
            errorCondition = "spareMicros Negative";
-           errorValue = 273;
+           errorValue = 290;
            lcd.clear();
            lcd.setCursor(0,1);  lcd.print(errorCondition);  lcd.setCursor(0,2);  lcd.print(errorValue);
            opState = ERROR_INFO;
            delay(MENU_DELAY);
            break;
       }
+
       // Wait until time to log data.
       //TODO SLEEP
-      while (micros() < logTime)
-      {
-         
-         // Log data until Serial input or file full.
-         uint8_t buttons = 0;
-          do 
-          {
-             buttons = ReadButtons();
-             if ((buttons & BUTTON_SELECT)
-                && (buttons & BUTTON_LEFT))
-                {
-                   // Force QUIT
-                   errorCondition = "FORCE QUIT";
-                   errorValue = 306;
-                   lcd.clear();
-                   lcd.setCursor(0,1);  lcd.print(errorCondition);  lcd.setCursor(0,2);  lcd.print(errorValue);
-                   opState = ERROR_INFO;
-                   delay(MENU_DELAY);
-                   rb.print((logTime - logStartTime)/LOG_INTERVAL_USEC); // convert usec to seconds
-                   rb.write(',');
-                   rb.print(adcdeg310);
-                   rb.write(',');
-                   rb.println(adcdeg430);
-                   delay(1);
-                   // Write any RingBuf data to file.
-                   rb.sync();
-                   file.truncate();
-                   file.rewind();
-                   file.close();
-                   return;
-                }
-          }while(buttons == 0);
-         
+      uint8_t buttons = 0;
+      while (micros() <= logTime)
+      {  buttons = ReadButtons();
+         if ((buttons & BUTTON_SELECT)
+            && (buttons & BUTTON_LEFT))
+            {  // Force QUIT
+               errorCondition = "FORCE QUIT";
+               errorValue = 309;
+               lcd.clear();
+               lcd.setCursor(0,1);  lcd.print(errorCondition);  lcd.setCursor(0,2);  lcd.print(errorValue);
+               //delay(MENU_DELAY);
+               rb.print(iii);
+               rb.write(',');
+               rb.print(logTimeStamp);
+               rb.write(',');
+               rb.print(adcdeg310);
+               rb.write(',');
+               rb.println(adcdeg430);
+               // Write any RingBuf data to file.
+               rb.sync();
+               file.truncate();
+               file.rewind();
+               file.close();
+               opState = ERROR_INFO;
+               delayMicroseconds(MENU_DELAY);
+               return;
+            }
       }
-         
-   
+
       // Read ADC0 - about 17 usec on Teensy 4, Teensy 3.6 is faster.
-      uint16_t adcdeg310 = analogRead(MR310_IN);//*360/1024;
-      uint16_t adcdeg430 = analogRead(MR430_IN);//*360/1024;
+      uint16_t adcdeg310 = analogRead(MR310_IN);  //read pin 23;
+      uint16_t adcdeg430 = analogRead(MR430_IN);  //*360/1024;
+
       // Print spareMicros into the RingBuf as test data.
       // Print adc into RingBuf.
-      rb.print((logTime - logStartTime)/LOG_INTERVAL_USEC); // convert usec to seconds
+      rb.print(iii);
+      rb.write(',');
+      rb.print(logTimeStamp); // convert usec to seconds
       rb.write(',');
       rb.print(adcdeg310);
       rb.write(',');
       rb.println(adcdeg430);
-
-      snprintf(tShort,sizeof(tShort),"%02d:%02d:%02d", hour(), minute(), second());
-      lcd.setCursor(11, 0);
-      lcd.print(tShort);
-      lcd.print(" ");
-      lcd.setCursor(7, 1);  lcd.print((char) symDegree);
-      lcd.setCursor(18, 1); lcd.print((char) symDegree);
-      lcd.setCursor(0, 1);
-      lcd.print("L: "); lcd.print(adcdeg310); lcd.print(" ");
-      lcd.setCursor(11, 1);
-      lcd.print("R: "); lcd.print(adcdeg430); lcd.print(" ");
-      lcd.setCursor(0, 2);
-      lcd.print(logStartTime);
-      lcd.print(" ");
-      lcd.setCursor(14, 2);
-      lcd.print((logTime - logStartTime)/LOG_INTERVAL_USEC); // convert usec to seconds
-      lcd.print(" ");
-      lcd.setCursor(19, 3);
-
       if (rb.getWriteError()) {
          // Error caused by too few free bytes in RingBuf.
          errorCondition = "Buffer WriteError";
-         errorValue = 316;
+         errorValue = 348;
          lcd.clear();
          lcd.setCursor(0,1);  lcd.print(errorCondition);  lcd.setCursor(0,2);  lcd.print(errorValue);
          opState = ERROR_INFO;
          delay(MENU_DELAY);
          break;
       }
+
+      //snprintf(tShort,sizeof(tShort),"%02d:%02d:%02d", hour(), minute(), second());
+      //lcd.setCursor(11, 0);
+      //lcd.print(tShort);
+      //lcd.print(" ");
+      //lcd.setCursor(7, 1);  lcd.write(1);
+      //lcd.setCursor(18, 1); lcd.write(1);
+      lcd.setCursor(0, 1);  lcd.print("L:"); lcd.print(adcdeg310); lcd.print("  ");
+      lcd.setCursor(11, 1); lcd.print("R:"); lcd.print(adcdeg430); lcd.print("  ");
+      lcd.setCursor(0, 2);
+      lcd.print("t :");
+      lcd.print(logTimeStamp); // convert usec to seconds
+      lcd.print(" ms");
+      
+
   }
 
   // Write any RingBuf data to file.
@@ -405,7 +412,7 @@ void LogData()
 void ErrorInfo()
 {
    lcd.setCursor(14, 2);
-   lcd.print((logTime - logStartTime)/LOG_INTERVAL_USEC); // convert usec to seconds
+   lcd.print(logTimeStamp); // convert usec to seconds
    lcd.print(" ");
    lcd.setCursor(0, 3);
    lcd.print("Start Over ?       <");
@@ -531,20 +538,18 @@ void Off()
 
 // ************************************************
 // SET_SUB State
-// LEFT for off
 // UP/DOWN to change SubjectID
 // RIGHT for TIME
+// LEFT for off
 // ************************************************
 void SetSub()
 {
    lcd.setCursor(0, 1);
-   lcd.print((char) symU);
-   lcd.write(1);
+   lcd.write(2);
+   lcd.write(3);
    lcd.print(F(" to Change Values"));
    lcd.setCursor(0, 2);
-   lcd.print((char) symL);
-   lcd.print((char) symR);
-   lcd.print(F(" to Navigate Menu"));
+   lcd.print(F("<> to Navigate Menu"));
    lcd.setCursor(0, 3);
    lcd.print(F("sub: "));
 
@@ -938,7 +943,7 @@ void WaitTrigger()
   // Initialize the SD.
   if (!sd.begin(SD_CONFIG)) {
      errorCondition = "SD InitErrorHalt";
-     errorValue = 879;
+     errorValue = 948;
      lcd.clear();
      lcd.setCursor(0,1);  lcd.print(errorCondition);  lcd.setCursor(0,2);  lcd.print(errorValue);
      opState = ERROR_INFO;
@@ -950,7 +955,7 @@ void WaitTrigger()
   // todo prevent overwrite
   if (!file.open(LOG_FILENAME, O_RDWR | O_CREAT | O_TRUNC)) {
       errorCondition = "SD FailedToOpen file";
-      errorValue = 891;
+      errorValue = 960;
       lcd.clear();
       lcd.setCursor(0,1);  lcd.print(errorCondition);  lcd.setCursor(0,2);  lcd.print(errorValue);
       opState = ERROR_INFO;
@@ -960,7 +965,7 @@ void WaitTrigger()
   // File must be pre-allocated to avoid huge delays searching for free clusters.
   if (!file.preAllocate(LOG_FILE_SIZE)) {
      errorCondition = "SD preAllocate Fail";
-     errorValue = 901;
+     errorValue = 970;
      lcd.clear();
      lcd.setCursor(0,1);  lcd.print(errorCondition);  lcd.setCursor(0,2);  lcd.print(errorValue);
      file.close();
@@ -1177,10 +1182,10 @@ void setup()
    display.display();
    // Initialize LCD DiSplay
    lcd.begin(20, 4);
-   // create down symbol from the binary
-   lcd.createChar(1, symDown);
-   delayMicroseconds(bounciness);
    lcd.blink();
+   lcd.createChar(1, degree); // create degree symbol from the binary
+   lcd.createChar(2, arrowUp);
+   lcd.createChar(3, arrowDown);
    lcd.setBacklight(BLUE);
    lcd.setCursor(0, 0);  
    lcd.print(F("    RoseLab fMRI    "));
@@ -1292,7 +1297,11 @@ void loop()
          break;
       case LOG_DATA:
          lcd.setBacklight(GREEN);
-         logStartTime = micros();
+         log_tzero_msec = (millis());
+         lcd.setCursor(0, 0);
+         lcd.print("t0:");
+         lcd.print(log_tzero_msec);
+         lcd.print(" ms");
          LogData();
          break;
       case ERROR_INFO:
@@ -1312,6 +1321,3 @@ void loop()
    //display.clearDisplay();
    //testdrawTIME();
 }
-
-
-
