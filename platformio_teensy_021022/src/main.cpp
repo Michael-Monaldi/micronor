@@ -1,11 +1,41 @@
 #include <Arduino.h>
 // Libraries for the Adafruit RGB/LCD Shield
-#include <Adafruit_RGBLCDShield.h>
-#include <Wire.h>
 
+#include <Wire.h>
+#include <Adafruit_RGBLCDShield.h>
+#include <utility/Adafruit_MCP23017.h>
+// The shield uses the I2C SCL and SDA pins. On classic Arduinos
+// this is Analog 4 and 5 so you can't use those for analogRead() anymore
+// However, you can connect other I2C sensors to the I2C bus and share I2C bus
+// These #defines make it easy to set the backlight color
+#define RED 0x1
+#define YELLOW 0x3
+#define GREEN 0x2
+#define TEAL 0x6
+#define BLUE 0x4
+#define VIOLET 0x5
+//#define WHITE 0x7
+#define BUTTON_SHIFT BUTTON_SELECT
+// define the degree symbol
+const char symDegree = 223;
+const char symU = 94;
+const char symD = 118;
+const char symL = 127;
+const char symR = 126;
+byte symDown[8] = {
+        B00000,
+        B00000,
+        B00000,
+        B00000,
+        B00000,
+        B10001,
+        B01010,
+        B00100};
+Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
+#define MENU_DELAY 1500
+#define bounciness 150
 // So we can save and retrieve settings
 #include <EEPROM.h>
-
 #include <TimeLib.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
@@ -67,18 +97,23 @@ uint32_t logTime;
 // ************************************************
 enum operatingState { OFF = 0, SET_SUB, SET_SES, SET_RUN, SET_DATE, SET_TIME, SET_VERIFY, WAIT_TRIGGER, LOG_DATA, ERROR_INFO};
 operatingState opState = OFF;
+
 double SubjectID = 1;
 double Session = 1;
 int SID = 1;
 int SES = 1;
-double TIME = 5;
-double DATE = 3;
 int RUN_N = 1;
+double DATE = 3;
+double TIME = 5;
+
 int increment = 1;
 char sBuffer[100];
+const char *opName[] = {"OFF", "set1 ", "run ", "ppp ", "iiii ", "dddd", "7sec"};
 String opString = F("null");
 String outString = F("empty");
 int opVar = 0;
+
+
 // ************************************************
 // Pin definitions
 // ************************************************
@@ -101,6 +136,7 @@ uint16_t adcdeg430 = 90;
 int deg310 = 31;
 int deg430 = 43;
 int paramsSaved = 0;
+
 // ************************************************
 // Display Variables and constants
 // ************************************************
@@ -114,38 +150,6 @@ int paramsSaved = 0;
 #define LOGO_WIDTH    16
 //unsigned long ttt = 1551500792;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire1, OLED_RESET);
-// These #defines make it easy to set the backlight color
-#define RED 0x1
-#define YELLOW 0x3
-#define GREEN 0x2
-#define TEAL 0x6
-#define BLUE 0x4
-#define VIOLET 0x5
-// define the degree symbol
-byte degree[8] = {B00110, B01001, B01001, B00110, B00000, B00000, B00000, B00000};
-byte arrowUp[8] = {
-        B00100,
-        B01110,
-        B10101,
-        B00100,
-        B00100,
-        B00100,
-        B00100,
-        B00100};
-byte arrowDown[8] = {
-        B00100,
-        B00100,
-        B00100,
-        B00100,
-        B00100,
-        B10101,
-        B01110,
-        B00100};
-Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
-#define MENU_DELAY 1500
-#define bounciness 150
-// #define WHITE 0x7
-// #define BUTTON_SELECT BUTTON_SELECT
 
 // ************************************************
 //Filenaming and lcd display vars
@@ -167,28 +171,16 @@ u_int32_t errorValue = 0;
 // Use Teensy SDIO
 //#define SD_CONFIG SdioConfig(FIFO_SDIO)//old
 #define SD_CONFIG SdioConfig(BUILTIN_SDCARD)//new
-
 // Interval between points for 25 ksps.
 #define LOG_INTERVAL_USEC 500000
 // Size to log 10 byte lines at 2.5 kHz for more than ten minutes.
-#define LOG_FILE_SIZE 10*2500*600  // 15,000,000 bytes.
+#define LOG_FILE_SIZE 10*2500*600  // 150,000,000 bytes.
 // Space to hold more than 800 ms of data for 10 byte lines at 25 ksps.
 #define RING_BUF_CAPACITY 100*512
 SdFs sd;
 FsFile file;
 // RingBuf for File type FsFile.
 RingBuf<FsFile, RING_BUF_CAPACITY> rb;
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -223,8 +215,8 @@ void LogData()
    lcd.setCursor(11, 0);
    lcd.print(tShort);
    lcd.print(" ");
-   lcd.setCursor(7, 1);  lcd.write(1);
-   lcd.setCursor(18, 1); lcd.write(1);
+   lcd.setCursor(7, 1);  lcd.print((char) symDegree);
+   lcd.setCursor(18, 1); lcd.print((char) symDegree);
    lcd.setCursor(0, 1);
    lcd.print("L: "); lcd.print(adcdeg310); lcd.print("  ");
    lcd.setCursor(11, 1);
@@ -342,8 +334,8 @@ void LogData()
       lcd.setCursor(11, 0);
       lcd.print(tShort);
       lcd.print(" ");
-      lcd.setCursor(7, 1);  lcd.write(1);
-      lcd.setCursor(18, 1); lcd.write(1);
+      lcd.setCursor(7, 1);  lcd.print((char) symDegree);
+      lcd.setCursor(18, 1); lcd.print((char) symDegree);
       lcd.setCursor(0, 1);
       lcd.print("L: "); lcd.print(adcdeg310); lcd.print(" ");
       lcd.setCursor(11, 1);
@@ -539,18 +531,20 @@ void Off()
 
 // ************************************************
 // SET_SUB State
+// LEFT for off
 // UP/DOWN to change SubjectID
 // RIGHT for TIME
-// LEFT for off
 // ************************************************
 void SetSub()
 {
    lcd.setCursor(0, 1);
-   lcd.write(2);
-   lcd.write(3);
+   lcd.print((char) symU);
+   lcd.write(1);
    lcd.print(F(" to Change Values"));
    lcd.setCursor(0, 2);
-   lcd.print(F("<> to Navigate Menu"));
+   lcd.print((char) symL);
+   lcd.print((char) symR);
+   lcd.print(F(" to Navigate Menu"));
    lcd.setCursor(0, 3);
    lcd.print(F("sub: "));
 
@@ -1183,10 +1177,10 @@ void setup()
    display.display();
    // Initialize LCD DiSplay
    lcd.begin(20, 4);
+   // create down symbol from the binary
+   lcd.createChar(1, symDown);
+   delayMicroseconds(bounciness);
    lcd.blink();
-   lcd.createChar(1, degree); // create degree symbol from the binary
-   lcd.createChar(2, arrowUp);
-   lcd.createChar(3, arrowDown);
    lcd.setBacklight(BLUE);
    lcd.setCursor(0, 0);  
    lcd.print(F("    RoseLab fMRI    "));
