@@ -15,23 +15,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/*
-    pullup / pulldown resistors
-xxx RTC
-    "begin" button
-    subject / session
-    wait for 5 from keyboard
-    >> send 5 to eprime
-    >> begin txt / csv
-    >> >> read values into file
-    >> close file
-    repeat x2
-xxx configure MR430 to match MR310
-xxx test homing
-xxx add LCD or 2 LCDs
-xxx DIN rail // cutting board
-    >> HIGH to homingPin_R & homingPin_L >> delay >> LOW
- */
 
 
 // ************************************************
@@ -76,9 +59,11 @@ double DATE = 3;
 int RUN_N = 1;
 int increment = 1;
 char sBuffer[100];
+const char *phasedesc[] = {"Initial melt", "Ramp t over time", "Hold hot", "Drop to cool est", "Casting temp", "Ready to cast"};
 String opString = F("null");
 String outString = F("empty");
 int opVar = 0;
+int pulses = 0;
 // ************************************************
 // Pin definitions
 // ************************************************
@@ -91,7 +76,7 @@ int opVar = 0;
 uint16_t adcdeg310 = 90;
 uint16_t adcdeg430 = 90;
 // Scanner pulse from BNC cable
-#define TRIGGER_IN 39
+#define TRIGGER_INPUT_PIN 39
 // unused?
 #define MeasurementP 7
 
@@ -122,8 +107,8 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire1, OLED_RESET);
 #define BLUE 0x4
 #define VIOLET 0x5
 // define the degree symbol
-byte degree[8] = {B00110, B01001, B01001, B00110, B00000, B00000, B00000, B00000};
-byte arrowUp[8] = {
+#define symDegree 223
+byte byteUp[8] = {
         B00100,
         B01110,
         B10101,
@@ -132,7 +117,7 @@ byte arrowUp[8] = {
         B00100,
         B00100,
         B00100};
-byte arrowDown[8] = {
+byte byteDown[8] = {
         B00100,
         B00100,
         B00100,
@@ -141,6 +126,8 @@ byte arrowDown[8] = {
         B10101,
         B01110,
         B00100};
+#define symUp 1
+#define symDown 2
 Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
 #define MENU_DELAY 1500
 #define bounciness 150
@@ -156,9 +143,9 @@ char MM[100];
 char tLong[40];
 char tShort[40];
 String errorCondition = " All  is  well !!!  ";
-u_int32_t errorValue = 0;
+uint32_t errorValue = 0;
 uint32_t logTimeStamp = 9;
-u_int32_t iii=0;
+uint32_t iii=0;
 // ************************************************
 // SD Card Logging Setup
 // ************************************************
@@ -170,7 +157,10 @@ u_int32_t iii=0;
 //#define SD_CONFIG SdioConfig(BUILTIN_SDCARD)//new
 
 // Interval between points for 7.69230769 Hz = period of 130000 uSec
-#define LOG_INTERVAL_USEC 130000
+// f(Hz) = 1 / T
+u_int32_t LOG_INTERVAL_USEC = 80000;
+double sampHz;// 1/(LOG_INTERVAL_USEC/fsConvert);
+double fsConvert = 1000000;// usec to sec
 // Size to log 10 byte lines at 2.5 kHz for more than ten minutes.
 #define LOG_FILE_SIZE 10*2500*600  // 15,000,000 bytes.
 // Space to hold more than 800 ms of data for 10 byte lines at 25 ksps.
@@ -217,16 +207,13 @@ uint8_t ReadButtons()
 void LogData()
 {
    // strcpy(LOG_FILENAME, "sub-000_ses-0_run-0.csv");
-   
    lcd.setCursor(0, 0);  
    lcd.print(F("Logging"));
    lcd.print(" ");
    snprintf(tShort,sizeof(tShort),"%02d:%02d:%02d", hour(), minute(), second());
-   lcd.setCursor(11, 0);
-   lcd.print(tShort);
-   lcd.print(" ");
-   lcd.setCursor(7, 1);  lcd.write(1);
-   lcd.setCursor(18, 1); lcd.write(1);
+   lcd.setCursor(12, 0); lcd.print(tShort); lcd.print(" ");
+   lcd.setCursor(7, 1);  lcd.print((char)symDegree);
+   lcd.setCursor(18, 1); lcd.print((char)symDegree);
    lcd.setCursor(0, 1);  lcd.print("L:"); lcd.print(adcdeg310); lcd.print("  ");
    lcd.setCursor(11, 1); lcd.print("R:"); lcd.print(adcdeg430); lcd.print("  ");
    lcd.setCursor(0, 3);
@@ -246,7 +233,7 @@ void LogData()
    // Start time.
    logTime = micros();
    
-      // Log data until BUTTONS or file full.
+   // Log data until BUTTONS or file full.
    while (!Serial.available())
    {
       // Amount of data in ringBuf.
@@ -308,7 +295,6 @@ void LogData()
                errorValue = 309;
                lcd.clear();
                lcd.setCursor(0,1);  lcd.print(errorCondition);  lcd.setCursor(0,2);  lcd.print(errorValue);
-               //delay(MENU_DELAY);
                rb.print(iii);
                rb.write(',');
                rb.print(logTimeStamp);
@@ -330,7 +316,6 @@ void LogData()
       // Read ADC0 - about 17 usec on Teensy 4, Teensy 3.6 is faster.
       uint16_t adcdeg310 = analogRead(MR310_IN);  //read pin 23;
       uint16_t adcdeg430 = analogRead(MR430_IN);  //*360/1024;
-
       // Print spareMicros into the RingBuf as test data.
       // Print adc into RingBuf.
       rb.print(iii);
@@ -357,15 +342,14 @@ void LogData()
       //lcd.print(" ");
       //lcd.setCursor(7, 1);  lcd.write(1);
       //lcd.setCursor(18, 1); lcd.write(1);
+
       lcd.setCursor(0, 1);  lcd.print("L:"); lcd.print(adcdeg310); lcd.print("  ");
       lcd.setCursor(11, 1); lcd.print("R:"); lcd.print(adcdeg430); lcd.print("  ");
       lcd.setCursor(0, 2);
-      lcd.print("t :");
-      lcd.print(logTimeStamp); // convert usec to seconds
-      lcd.print(" ms");
-      
-
-  }
+      //lcd.print("t :");
+      //lcd.print(logTimeStamp); // convert usec to seconds
+      //lcd.print(" ms");
+   }
 
   // Write any RingBuf data to file.
   rb.sync();
@@ -417,7 +401,7 @@ void ErrorInfo()
    lcd.setCursor(0, 3);
    lcd.print("Start Over ?       <");
    lcd.setCursor(19, 3);
-   delay(2*MENU_DELAY);
+   delay(MENU_DELAY);
    lcd.setCursor(0, 3);
    lcd.print(MM_BASE);
    lcd.setCursor(19, 3);
@@ -480,7 +464,7 @@ double EEPROM_readDouble(int address)
 void EEPROM_writeDouble(int address, double value)
 {
    byte* p = (byte*)(void*)&value;
-   for (int i = 0; i < sizeof(value); i++){
+   for (int i = 0; i < (sizeof(value)); i++){
       EEPROM.write(address++, *p++);}
 }
 // ************************************************
@@ -520,10 +504,11 @@ void Off()
    lcd.print(" BOTH Fiber Optics ");
    lcd.setCursor(0, 2);
    lcd.print(" All plugged in ???");
+   lcd.setCursor(19, 3);
    delay(MENU_DELAY/4);
    lcd.setCursor(0, 3);
    lcd.print(F("Enter Setup Press "));
-   lcd.setCursor(19, 3); lcd.print(">"); lcd.setCursor(19, 3);
+   lcd.print(">"); lcd.setCursor(19, 3);
 
    uint8_t buttons = 0;
    while( !(buttons & (BUTTON_RIGHT)) )
@@ -545,14 +530,13 @@ void Off()
 void SetSub()
 {
    lcd.setCursor(0, 1);
-   lcd.write(2);
-   lcd.write(3);
+   lcd.write(symUp);
+   lcd.write(symDown);
    lcd.print(F(" to Change Values"));
    lcd.setCursor(0, 2);
    lcd.print(F("<> to Navigate Menu"));
    lcd.setCursor(0, 3);
    lcd.print(F("sub: "));
-
    uint8_t buttons = 0;
    while(true)
    {
@@ -610,7 +594,7 @@ void SetSes()
    while(true)
    {
       buttons = ReadButtons();
-      int increment = 1;
+      //int increment = 1;
       //if (buttons & BUTTON_SELECT) {
          //increment *= 10;}
       if (buttons & BUTTON_LEFT) {
@@ -671,7 +655,7 @@ void SetRun()
    while(true)
    {
       buttons = ReadButtons();
-      int increment = 1;
+      //int increment = 1;
       //if (buttons & BUTTON_SELECT) {
          //increment *= 10;}
       if (buttons & BUTTON_LEFT) {
@@ -745,12 +729,14 @@ void SetDate(){
       //if ((millis() - lastInput) > MENU_DELAY) {
       //   opState = SET_VERIFY;
       //   return;}
-      lcd.setCursor(0, 1);
-      char dddd[40];
-      snprintf(dddd,sizeof(dddd),"%02d/%02d/%04d",  month(), day(), year());
-      lcd.print(dddd);
-      lcd.print(" ");
-
+      
+      //lcd.setCursor(0, 1);
+      //char dddd[40];
+      //snprintf(dddd,sizeof(dddd),"%02d/%02d/%04d",  month(), day(), year());
+      snprintf(tLong,sizeof(tLong),"%02d/%02d/%02d  %02d:%02d:%02d", month(), day(), year(), hour(), minute(), second());
+      //lcd.print(dddd);
+      //lcd.print(" ");
+      lcd.setCursor(0, 1); lcd.print(tLong);
       lcd.setCursor(0, 3);
       lcd.print("Date: ");
       lcd.print(DATE);
@@ -773,13 +759,13 @@ void SetDate(){
 void SetTime()
 {
    lcd.setCursor(0, 0);
-   lcd.print(F("Set TIME "));
-
+   lcd.print(F("Set Fs"));
    uint8_t buttons = 0;
    while(true)
    {
       buttons = ReadButtons();
-      int increment = 1;
+      
+      int increment = 100;
       if (buttons & BUTTON_SELECT) {
         increment *= 10;}
       if (buttons & BUTTON_LEFT) {
@@ -789,27 +775,23 @@ void SetTime()
          opState = SET_VERIFY;
          return;}
       if (buttons & BUTTON_UP) {
-         TIME += increment;
+         LOG_INTERVAL_USEC += increment;
          delay(bounciness);
          }
       if (buttons & BUTTON_DOWN) {
-         TIME -= increment;
+         LOG_INTERVAL_USEC -= increment;
          delay(bounciness);
          }
       // return to RUN after 3 seconds idle
       //if ((millis() - lastInput) > MENU_DELAY) {
       //   opState = SET_VERIFY;
       //   return;}
-      lcd.setCursor(0, 1);
       snprintf(tShort,sizeof(tShort),"%02d:%02d:%02d", hour(), minute(), second());
-      lcd.print(tShort);
-      lcd.print(" ");
-
-      lcd.setCursor(0, 3);
-      lcd.print("Time: ");
-      lcd.print(TIME);
-      lcd.print(" ");
-      lcd.setCursor(18, 3); lcd.print("<>"); lcd.setCursor(19, 3);
+      double sampHz = (1/(LOG_INTERVAL_USEC/fsConvert));
+      lcd.setCursor(12, 0); lcd.print(tShort); lcd.print(" ");
+      lcd.setCursor(0, 2); lcd.print("Fs: "); lcd.print(LOG_INTERVAL_USEC); lcd.print(" uSec");
+      lcd.setCursor(0, 3); lcd.print("("); lcd.print(sampHz); lcd.print("Hz");lcd.print(")");
+      lcd.setCursor(18,3); lcd.print("<>"); lcd.setCursor(19, 3);
       opVar = TIME;
       outString = opString + F(": ") + String(opVar) + '\n';
       Serial.print(outString);
@@ -825,7 +807,7 @@ void printAngles(void)
    //void testdrawTIME(void) {
    display.clearDisplay();
    char tLong[40];
-   snprintf( tLong,sizeof(tLong),"%02d/%02d/%02d %02d:%02d:%02d", month(), day(), year(), hour(), minute(), second() );
+   snprintf( tLong,sizeof(tLong),"%02d/%02d/%02d  %02d:%02d:%02d", month(), day(), year(), hour(), minute(), second() );
    //display.clearDisplay();
    display.setTextSize(1);            // Normal 1:1 pixel scale
    //display.setTextColor(SSD1306_WHITE);        // Draw white text
@@ -851,21 +833,20 @@ void printAngles(void)
 
 void SetVerify()
 {
-  if (paramsSaved == 0) {
-   SaveParameters();
-   paramsSaved = 1;
-  }
+
    //lcd.print("Verify ");
    lcd.setCursor(0, 0);
-   snprintf(tLong,sizeof(tLong),"%02d/%02d/%02d %02d:%02d:%02d", month(), day(), year(), hour(), minute(), second());
+   snprintf(tLong,sizeof(tLong),"%02d/%02d/%02d  %02d:%02d:%02d", month(), day(), year(), hour(), minute(), second());
    lcd.print(tLong);
    lcd.setCursor(0, 1);
    snprintf(MM_BASE,sizeof(MM_BASE),"sub-%01d_ses-%01d_run-%01d", SID, SES, RUN_N);
    lcd.print(MM_BASE);
    //lcd.print("sub-"); lcd.print(SubjectID); lcd.print("_ses-"); lcd.print(Session);
-   lcd.setCursor(0, 2);
-   lcd.print("run: "); lcd.print(RUN_N);
+ 
+   double sampHz = (1/(LOG_INTERVAL_USEC/fsConvert));
+   lcd.setCursor(0, 2); lcd.print("Fs:"); lcd.print(LOG_INTERVAL_USEC); lcd.print(" "); lcd.print("("); lcd.print(sampHz); lcd.print("Hz");lcd.print(")");
    //printAngles();
+   lcd.setCursor(19, 3);
    delay(MENU_DELAY);
    lcd.setCursor(0, 3);
    lcd.print("< back ");
@@ -877,7 +858,7 @@ void SetVerify()
    while(true)
    {
       buttons = ReadButtons();
-      int increment = 1;
+      //int increment = 1;
       if ((buttons & BUTTON_SELECT)
          && (buttons & BUTTON_RIGHT) ) {
              opState = WAIT_TRIGGER;
@@ -899,7 +880,7 @@ void SetVerify()
          delay(bounciness);
          }
       lcd.setCursor(0, 0);
-      snprintf(tLong,sizeof(tLong),"%02d/%02d/%02d %02d:%02d:%02d", month(), day(), year(), hour(), minute(), second());
+      snprintf(tLong,sizeof(tLong),"%02d/%02d/%02d  %02d:%02d:%02d", month(), day(), year(), hour(), minute(), second());
       lcd.print(tLong);
       lcd.setCursor(19, 3);
    }
@@ -928,7 +909,7 @@ void WaitTrigger()
    snprintf(MM,sizeof(MM),"sub-%01d_ses-%01d_run-%01d.csv", SID, SES, RUN_N);
    LOG_FILENAME = MM;
    //lcd.print("sub-"); lcd.print(SubjectID); lcd.print("_ses-"); lcd.print(Session);
-   snprintf(tLong,sizeof(tLong),"%02d/%02d/%02d %02d:%02d:%02d", month(), day(), year(), hour(), minute(), second());
+   snprintf(tLong,sizeof(tLong),"%02d/%02d/%02d  %02d:%02d:%02d", month(), day(), year(), hour(), minute(), second());
    lcd.setCursor(0, 0);
    lcd.print(tLong);
    lcd.setCursor(0, 1);
@@ -989,55 +970,42 @@ void WaitTrigger()
    digitalWrite(MR430_RST, LOW);
    digitalWrite(MR310_RST, LOW);
    lcd.setCursor(0, 2);
-   lcd.print(F("                    "));
-   lcd.setCursor(0, 3);
+   lcd.print(F("Saving your Settings"));
+   lcd.setCursor(19, 3);
+     if (paramsSaved == 0) {
+   SaveParameters();
+   paramsSaved = 1;
+  }
+   delay(MENU_DELAY);
+   lcd.setCursor(0, 2);
    lcd.print(F("Waiting for Trigger "));
+    lcd.setCursor(0, 3);
+   lcd.print("< back ");
+   lcd.setCursor(14, 3);
+   lcd.print(" OK +>");
    lcd.setCursor(19, 3);
 
    // todo make sure interrupt on trigger_pin
    uint8_t buttons = 0;
-   while(true) {
+   while(digitalReadFast(TRIGGER_INPUT_PIN)==LOW)
+   {
+      // Force Logging
       buttons = ReadButtons();
       if ((buttons & BUTTON_SELECT)
          && (buttons & BUTTON_RIGHT) ) {
-            // Force Logging
             opState = LOG_DATA;
-            return;
-            }
-            //LogData();
-      //else if (buttons & BUTTON_RIGHT) {
-         //opState = SET_VERIFY;
-         //  return;
-         // }
+            return;}
       if (buttons & BUTTON_LEFT) {
         opState = SET_VERIFY;
-        return;
-        }
-      // return to RUN after 3 seconds idle
-      //if ((millis() - lastInput) > (2*MENU_DELAY)) {
-      //   opState = WAIT_TRIGGER;
-      //   return;}
-      lcd.setCursor(0, 0);
-      snprintf(tLong,sizeof(tLong),"%02d/%02d/%02d %02d:%02d:%02d", month(), day(), year(), hour(), minute(), second());
-      lcd.print(tLong);
-    }
-
-
-    // while !trigger
-    // do all the above
-     // else
-      //LogData();
-    //      deg310 = analogRead(MR310_IN)*360/1024;
-    //      deg430 = analogRead(MR430_IN)*360/1024;
-         //printAngles();
-         // periodically log to serial port in csv format
-    //      if (millis() - lastLogTime > logInterval) {
-    //        lastLogTime = millis();
-    //        Serial.print("A ");
-    //        Serial.print(",");
-    //        Serial.println("B ");}
-    //end while loop
-      //delayMicroseconds(1);
+        return;}
+      //lcd.setCursor(0, 0);
+      //snprintf(tLong,sizeof(tLong),"%02d/%02d/%02d  %02d:%02d:%02d", month(), day(), year(), hour(), minute(), second());
+      //lcd.print(tLong);
+      //lcd.setCursor(19, 3);
+   }
+   
+   opState = LOG_DATA;
+   return;
 }
 
 
@@ -1182,12 +1150,11 @@ void setup()
    display.display();
    // Initialize LCD DiSplay
    lcd.begin(20, 4);
-   lcd.blink();
-   lcd.createChar(1, degree); // create degree symbol from the binary
-   lcd.createChar(2, arrowUp);
-   lcd.createChar(3, arrowDown);
+   lcd.setCursor(0, 0);
+   lcd.createChar(1, byteUp); // create degree symbol from the binary
+   lcd.createChar(2, byteDown);
    lcd.setBacklight(BLUE);
-   lcd.setCursor(0, 0);  
+   lcd.blink();
    lcd.print(F("    RoseLab fMRI    "));
    lcd.setCursor(19, 3);
    // Initialize Relay Control:
@@ -1201,7 +1168,7 @@ void setup()
    // Set up Ground & Power for the sensor from GPIO pins
    pinMode(MR310_IN, INPUT_PULLDOWN);
    pinMode(MR430_IN, INPUT);
-   pinMode(TRIGGER_IN, INPUT);
+   pinMode(TRIGGER_INPUT_PIN, INPUT);
    // Splash screen
    delay(MENU_DELAY/4);
    display.clearDisplay();
@@ -1245,7 +1212,8 @@ void loop()
    }
    int SID = SubjectID;
    int SES = Session;
-   int increment = 1;
+   increment = 1;
+   
    lcd.clear();
    switch (opState)
    {
@@ -1282,7 +1250,7 @@ void loop()
          SetDate();
          break;
       case SET_TIME:
-         opString = F("SET_TIME");
+         opString = F("SET_TIME (usec Fs)");
          lcd.setBacklight(GREEN);
          SetTime();
          break;
@@ -1321,3 +1289,24 @@ void loop()
    //display.clearDisplay();
    //testdrawTIME();
 }
+
+
+
+
+/*
+    pullup / pulldown resistors
+xxx RTC
+    "begin" button
+    subject / session
+    wait for 5 from keyboard
+    >> send 5 to eprime
+    >> begin txt / csv
+    >> >> read values into file
+    >> close file
+    repeat x2
+xxx configure MR430 to match MR310
+xxx test homing
+xxx add LCD or 2 LCDs
+xxx DIN rail // cutting board
+    >> HIGH to homingPin_R & homingPin_L >> delay >> LOW
+ */
