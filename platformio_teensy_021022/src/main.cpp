@@ -41,6 +41,7 @@ boolean errorState = false;
 unsigned long lastInput = 0; // last button press
 const int logInterval = 10000; // log every 10 seconds
 uint32_t log_tzero_msec;
+#define log_duration_msec 120000
 uint32_t logTime;
 
 
@@ -73,8 +74,8 @@ int pulses = 0;
 // read ADCs
 #define MR310_IN 16
 #define MR430_IN 23
-uint16_t adcdeg310 = 90;
-uint16_t adcdeg430 = 90;
+uint16_t adcdeg310 = 999;
+uint16_t adcdeg430 = 999;
 // Scanner pulse from BNC cable
 #define TRIGGER_INPUT_PIN 39
 // unused?
@@ -108,6 +109,10 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire1, OLED_RESET);
 #define VIOLET 0x5
 // define the degree symbol
 #define symDegree 223
+//#define symUp 94
+//#define symDown 118
+#define symLeft 127
+#define symRight 126
 byte byteUp[8] = {
         B00100,
         B01110,
@@ -158,7 +163,7 @@ uint32_t iii=0;
 
 // Interval between points for 7.69230769 Hz = period of 130000 uSec
 // f(Hz) = 1 / T
-u_int32_t LOG_INTERVAL_USEC = 80000;
+u_int32_t LOG_INTERVAL_USEC = 120000;
 double sampHz;// 1/(LOG_INTERVAL_USEC/fsConvert);
 double fsConvert = 1000000;// usec to sec
 // Size to log 10 byte lines at 2.5 kHz for more than ten minutes.
@@ -174,18 +179,6 @@ RingBuf<FsFile, RING_BUF_CAPACITY> rb;
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 // ************************************************
 // Check buttons and time-stamp the last press
 // ************************************************
@@ -196,8 +189,6 @@ uint8_t ReadButtons()
     lastInput = millis();}
   return buttons;
 }
-
-
 
 
 // ************************************************
@@ -218,12 +209,8 @@ void LogData()
    lcd.setCursor(11, 1); lcd.print("R:"); lcd.print(adcdeg430); lcd.print("  ");
    lcd.setCursor(0, 3);
    lcd.print(MM_BASE);
-   lcd.setCursor(0, 0);
-   lcd.print("t0:");
-   lcd.print(log_tzero_msec);
-   lcd.print(" ms");
-   
-   
+   lcd.setCursor(0, 2); lcd.print("t :");
+   iii = 0;
    // initialize the RingBuf.
    rb.begin(&file);
    // Max RingBuf used bytes. Useful to understand RingBuf overrun.
@@ -231,10 +218,13 @@ void LogData()
    // Min spare micros in loop.
    int32_t minSpareMicros = INT32_MAX;
    // Start time.
+   log_tzero_msec = millis();
+   lcd.setCursor(0, 0); lcd.print("t0:"); lcd.print(log_tzero_msec/1000); lcd.print(" sec");
    logTime = micros();
    
    // Log data until BUTTONS or file full.
-   while (!Serial.available())
+//   while (!Serial.available() || (logTimeStamp < (log_tzero_msec + log_duration_msec)) )
+   while ( logTimeStamp < (log_tzero_msec + log_duration_msec) )
    {
       // Amount of data in ringBuf.
       size_t n = rb.bytesUsed();
@@ -286,8 +276,9 @@ void LogData()
       // Wait until time to log data.
       //TODO SLEEP
       uint8_t buttons = 0;
-      while (micros() <= logTime)
-      {  buttons = ReadButtons();
+      while ( micros() <= (logTime-10000) )
+      {
+         buttons = ReadButtons();
          if ((buttons & BUTTON_SELECT)
             && (buttons & BUTTON_LEFT))
             {  // Force QUIT
@@ -343,9 +334,9 @@ void LogData()
       //lcd.setCursor(7, 1);  lcd.write(1);
       //lcd.setCursor(18, 1); lcd.write(1);
 
-      lcd.setCursor(0, 1);  lcd.print("L:"); lcd.print(adcdeg310); lcd.print("  ");
-      lcd.setCursor(11, 1); lcd.print("R:"); lcd.print(adcdeg430); lcd.print("  ");
-      lcd.setCursor(0, 2);
+      lcd.setCursor(2, 1); lcd.print(adcdeg310); lcd.print("  ");
+      lcd.setCursor(13,1); lcd.print(adcdeg430); lcd.print("  ");
+      lcd.setCursor(3, 2); lcd.print(logTimeStamp/1000); 
       //lcd.print("t :");
       //lcd.print(logTimeStamp); // convert usec to seconds
       //lcd.print(" ms");
@@ -356,8 +347,6 @@ void LogData()
   file.truncate();
   file.rewind();
   file.close();
-  // TODO
-  // attach interrupt signal stop
  
   // Print first twenty lines of file.
   Serial.println(errorCondition);
@@ -369,19 +358,23 @@ void LogData()
     Serial.write(c);
     if (c == '\n') n++;
   }
-
+  lcd.clear();
+  lcd.setBacklight(BLUE);
   lcd.setCursor(0, 0);
   lcd.print("fileSize:maxByteUsed");
   lcd.setCursor(0, 1);
   lcd.print((uint32_t)file.fileSize()); lcd.print(" "); lcd.print(maxUsed); lcd.print(" ");
   lcd.setCursor(0, 2);
-  lcd.print("minSpareMicros");
-  lcd.setCursor(0, 3);
-  lcd.print(minSpareMicros); lcd.print(" ");
+  lcd.print("Run "); lcd.print(RUN_N); lcd.print(":  "); lcd.print(logTimeStamp/1000); lcd.print(" seconds");
+  lcd.setCursor(19, 3);
+ 
 
   file.close();
-  delay(MENU_DELAY);
-
+  delay(60000);
+  errorCondition = "      All Good      ";
+  errorValue = (log_tzero_msec/1000);
+  RUN_N += 1;
+  opState = ERROR_INFO;
 }
 
 
@@ -395,8 +388,11 @@ void LogData()
 // ************************************************
 void ErrorInfo()
 {
-   lcd.setCursor(14, 2);
-   lcd.print(logTimeStamp); // convert usec to seconds
+   lcd.setCursor(0, 1);  lcd.print(errorCondition);  lcd.setCursor(0,2);  lcd.print(errorValue);
+   lcd.setCursor(0, 2);
+   lcd.print("Run "); lcd.print(RUN_N-1); lcd.print(":  "); lcd.print(logTimeStamp/1000); lcd.print(" seconds");
+   //lcd.setCursor(14, 2);
+   //lcd.print(logTimeStamp); // convert usec to seconds
    lcd.print(" ");
    lcd.setCursor(0, 3);
    lcd.print("Start Over ?       <");
@@ -405,7 +401,7 @@ void ErrorInfo()
    lcd.setCursor(0, 3);
    lcd.print(MM_BASE);
    lcd.setCursor(19, 3);
-   delay(MENU_DELAY/2);
+   //delay(MENU_DELAY/2);
 
    uint8_t buttons = 0;
    while(true)
@@ -788,9 +784,9 @@ void SetTime()
       //   return;}
       snprintf(tShort,sizeof(tShort),"%02d:%02d:%02d", hour(), minute(), second());
       double sampHz = (1/(LOG_INTERVAL_USEC/fsConvert));
-      lcd.setCursor(12, 0); lcd.print(tShort); lcd.print(" ");
-      lcd.setCursor(0, 2); lcd.print("Fs: "); lcd.print(LOG_INTERVAL_USEC); lcd.print(" uSec");
-      lcd.setCursor(0, 3); lcd.print("("); lcd.print(sampHz); lcd.print("Hz");lcd.print(")");
+      lcd.setCursor(12, 0); lcd.print(tShort);// lcd.print(" ");
+      lcd.setCursor(0, 2); lcd.print("("); lcd.print(sampHz); lcd.print("Hz");lcd.print(")");
+      lcd.setCursor(0, 3); lcd.print("Fs: "); lcd.print(LOG_INTERVAL_USEC); lcd.print(" uSec");
       lcd.setCursor(18,3); lcd.print("<>"); lcd.setCursor(19, 3);
       opVar = TIME;
       outString = opString + F(": ") + String(opVar) + '\n';
@@ -920,7 +916,7 @@ void WaitTrigger()
    lcd.setCursor(0, 2);
    lcd.print(F("Initializing SD card"));
    lcd.setCursor(19, 3);
-
+ 
   // Initialize the SD.
   if (!sd.begin(SD_CONFIG)) {
      errorCondition = "SD InitErrorHalt";
@@ -932,6 +928,10 @@ void WaitTrigger()
      delay(MENU_DELAY);
      return;
    }
+
+  //put this next line *Right Before* any file open line:
+  //SdFile::dateTimeCallback(dateTime);
+  //dataFile = SD.open(datafilename, FILE_WRITE);
   // Open or create file - truncate existing file.
   // todo prevent overwrite
   if (!file.open(LOG_FILENAME, O_RDWR | O_CREAT | O_TRUNC)) {
@@ -955,14 +955,13 @@ void WaitTrigger()
      return;
    }
 
-   //String("sub-") +String(SubjectID,0) + String("_ses-")+String(Session,0) + String("_run-") + String(RUN_N,1);//%03d_ses-%02d_run-%01d", SID, Session, RUN_N);
-   //        char nnn[40];
-   //       Serial.print(SubjectID); Serial.print(",");
-   //       Serial.print(SID); Serial.print(",");
-   //       Serial.print(Session); Serial.print(",");
-   //       Serial.println(RUN_N);
-   //LOG_FILENAME = snprintf(LOG_FILENAME,sizeof(LOG_FILENAME),"sub-%3d_ses-%1d_run-%1d.csv", SID, Session, RUN_N);
-   //Serial.print(LCD_FILENAME);
+   file.print("Sample");
+   file.write(',');
+   file.print("logTime-ms");
+   file.write(',');
+   file.print("Left-Orange");
+   file.write(',');
+   file.println("Right-Black");
 
    digitalWrite(MR310_RST, HIGH);
    digitalWrite(MR430_RST, HIGH);
@@ -981,9 +980,9 @@ void WaitTrigger()
    lcd.print(F("Waiting for Trigger "));
     lcd.setCursor(0, 3);
    lcd.print("< back ");
-   lcd.setCursor(14, 3);
-   lcd.print(" OK +>");
-   lcd.setCursor(19, 3);
+   lcd.setCursor(11, 3);
+   lcd.print(" FORCE +>");
+   lcd.setCursor(19, 2);
 
    // todo make sure interrupt on trigger_pin
    uint8_t buttons = 0;
@@ -1012,6 +1011,10 @@ void WaitTrigger()
 
 
 
+
+
+
+
 // ************************************************
 // Called by ISR every 15ms to drive the output
 // ************************************************
@@ -1032,10 +1035,6 @@ void DriveOutput()
 
 
 
-time_t getTeensy3Time()
-{
-  return Teensy3Clock.get();
-}
 
 
 
@@ -1127,10 +1126,22 @@ void LoadParameters()
 
 
 
+time_t getTeensy3Time()
+{
+  return Teensy3Clock.get();
+}
 
 
 
-
+void dateTime(uint16_t* date, uint16_t* time) {
+  // after your rtc is set up and working you code just needs:
+  // https://forum.arduino.cc/t/file-creation-date-and-time-in-sd-card/336037/12
+  //DateTime now = now();
+  // return date using FAT_DATE macro to format fields
+  *date = FS_DATE(year(), month(), day());
+  // return time using FAT_TIME macro to format fields
+  *time = FS_TIME(hour(), minute(), second());
+}
 
 
 // ************************************************
@@ -1138,7 +1149,6 @@ void LoadParameters()
 // ************************************************
 void setup()
 {
-   //
    // put your setup code here, to run once:
    Serial.begin(115200);
     if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS))
@@ -1147,6 +1157,10 @@ void setup()
        for(;;); // Don't proceed, loop forever
     }
    setSyncProvider(getTeensy3Time);
+   //put this next line *Right Before* any file open line:
+   SdFile::dateTimeCallback(dateTime);
+   //dataFile = SD.open(datafilename, FILE_WRITE);
+
    display.display();
    // Initialize LCD DiSplay
    lcd.begin(20, 4);
@@ -1267,10 +1281,9 @@ void loop()
          lcd.setBacklight(GREEN);
          log_tzero_msec = (millis());
          lcd.setCursor(0, 0);
-         lcd.print("t0:");
-         lcd.print(log_tzero_msec);
-         lcd.print(" ms");
+         lcd.print("t0:"); lcd.print(log_tzero_msec/1000); lcd.print(" sec");
          LogData();
+         log_tzero_msec = (millis());
          break;
       case ERROR_INFO:
          lcd.setBacklight(RED);
