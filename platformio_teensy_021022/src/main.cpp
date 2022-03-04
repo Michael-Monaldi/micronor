@@ -54,7 +54,13 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire1, OLED_RESET);
 #define VIOLET 0x5
 #define TEAL 0x6
 // #define WHITE 0x7
-// #define BUTTON_SELECT BUTTON_SELECT
+
+// //!< Select button #define BUTTON_SELECT  0x01
+// //!< Right button  #define BUTTON_RIGHT   0x02
+// //!< Down button   #define BUTTON_DOWN    0x04
+// //!< Up button     #define BUTTON_UP      0x08
+// //!< Left button   #define BUTTON_LEFT    0x10
+#define BUTTON_SHIFT BUTTON_SELECT
 
 // define the degree symbol
 #define symDegree 223
@@ -293,11 +299,26 @@ void dateTime(uint16_t* date, uint16_t* time) {
 // ************************************************
 // ssd1306 ??
 // ************************************************
-void testdrawTIME(void) {
-   char tLong[40];
-   snprintf( tLong,sizeof(tLong),"%02d/%02d/%02d  %02d:%02d:%02d", month(), day(), year(), hour(), minute(), second() );
-   delayMicroseconds(1);
+void printTIMELCD() {
+   //enum operatingState { TEST = 0,   OFF,   SET_DATE, SET_SPEED, SET_SUB, SET_SES, SET_RUN,  SET_VERIFY,  WAIT_TRIGGER,       LOG_DATA,      ERROR_INFO };
+   snprintf(tLong,sizeof(tLong),"%02d/%02d/%02d  %02d:%02d:%02d", month(), day(), year(), hour(), minute(), second());
+   snprintf(tShort,sizeof(tShort),"%02d:%02d:%02d", hour(), minute(), second());
+   switch (opState)
+   {
+      case SET_DATE:
+         lcd.setCursor(0, 1);  lcd.print(tLong);
+         break;
+      case WAIT_TRIGGER:
+         lcd.setCursor(0, 0);  lcd.print(tLong);
+         break;
+      default:
+         lcd.setCursor(12,0); lcd.print(tShort);
+         break;
+   }
 }
+   
+
+
 // ************************************************
 // Called by ISR every 15ms to drive the output
 // ************************************************
@@ -316,86 +337,82 @@ void testdrawTIME(void) {
 //     digitalWrite(MeasurementP,LOW);}
 //}
 
-/*
-// ************************************************
-// Start the Auto-Tuning cycle
-// ************************************************
-void StartAutoTune()
-{   // REmember the mode we were in
-//   ATuneModeRemember = myPID.GetMode();
-   // set up the auto-tune parameters
-//   aTune.SetNoiseBand(aTuneNoise);
-//   aTune.SetOutputStep(aTuneStep);
-//   aTune.SetLookbackSec((int)aTuneLookBack);
-   tuning = true;
-}
-// ************************************************
-// Return to normal control
-// ************************************************
-void FinishAutoTune()
-{   tuning = false;
-   // Extract the auto-tune calculated parameters
-//   SubjectID = aTune.GetSubjectID();
- //  TIME = aTune.GetTIME();
- //  DATE = aTune.GetDATE();
-   // Re-tune the PID and revert to normal control mode
-   //myPID.SetTunings(SubjectID,TIME,DATE);
-   //myPID.SetMode(ATuneModeRemember);
-      // Persist any changed parameters to EEPROM
-   SaveParameters();
-}
-*/
-
-
-int pcount = 0;
 
 
 
-// ************************************************
-// OFF - Initial State
-// RIGHT to SET_DATE
-// ************************************************
 uint32_t delta = 0;
 uint32_t start = 0;
 elapsedMicros t_usec;
-
-void loop()
+int pcount = 0;
+// ************************************************
+// TEST - Initial State
+// RIGHT to OFF
+// ************************************************
+void Test()
 {
-   /*
-   // make sure outputs are off
-   digitalWrite(MR310_RST, LOW);
-   digitalWrite(MR430_RST, LOW);
-   lcd.setCursor(19, 3);
-   delay(MENU_DELAY/4);
-   lcd.setCursor(0, 3);  lcd.print(F("Enter Setup Press ")); lcd.print(">");
-   lcd.setCursor(19, 3);
-*/
    EL_msec = 0;
-   
-
-   //uint8_t buttons = 0;
-   while( (digitalReadFast(TRIGGER_INPUT_PIN)==LOW) )// && (num>x))//*!(buttons & (BUTTON_RIGHT)) )
-   {
-/*   {
-      buttons = ReadButtons();
-   }
-   windowStartTime = millis();
-   opState = OFF;
-*/
-      if (EL_msec > 5000)
-      {
-         lcd.setCursor(0, 1);  lcd.print(" pulses   duration U");
-         lcd.setCursor(5, 2);  lcd.print(pcount); lcd.print("    ");  lcd.print(delta-start);  lcd.print(" ");
-         EL_msec = 0;
-      }
-   }
-   //u_start = micros();
-   pcount += 1;
    start = t_usec;
-   while ( (digitalReadFast(TRIGGER_INPUT_PIN)==HIGH) )
-   {}
-   // = t_usec;// - start;
-   delta = t_usec;
+
+   uint8_t buttons = 0;
+   while(true)// && (num>x))//*!(buttons & (BUTTON_RIGHT)) )
+   {
+      buttons = ReadButtons();
+      if (buttons & BUTTON_SELECT)
+      {
+         pcount = 0;
+         //EL_msec = 0;
+         lcd.setBacklight(RED);
+         lcd.setCursor(0, 1);  lcd.print(" pulses   duration U");
+         while(pcount < 30)
+         {
+            while( (digitalReadFast(TRIGGER_INPUT_PIN)==LOW) )
+            {
+               if (EL_msec > 1103)
+               {
+                  lcd.setCursor(5, 2);  lcd.print(pcount); lcd.print("    ");  lcd.print(delta-start);  lcd.print(" ");
+                  printTIMELCD();
+                  EL_msec = 0;
+               }
+            }
+            pcount += 1;
+            start = t_usec;
+            while ( (digitalReadFast(TRIGGER_INPUT_PIN)==HIGH) )
+            {}
+            delta = t_usec;
+            //pulseIn()
+         }
+         lcd.setBacklight(BLUE);
+         lcd.setCursor(5, 2);  lcd.print(pcount); lcd.print("    ");  lcd.print(delta-start);  lcd.print(" ");
+         //delay(MENU_DELAY);
+      }
+
+      if (buttons & BUTTON_DOWN){
+         lcd.clear();
+      }
+      if (buttons & BUTTON_RIGHT){
+         opState = OFF;
+         return;
+      }
+      if (buttons & BUTTON_LEFT){
+         lcd.setBacklight(RED);
+         adcdeg310 = analogRead(MR310_IN);
+         adcdeg430 = analogRead(MR430_IN);         
+         lcd.setCursor(7, 1);  lcd.print((char)symDegree);
+         lcd.setCursor(18,1);  lcd.print((char)symDegree);
+         lcd.setCursor(0, 1);  lcd.print("L:"); lcd.print(adcdeg310); lcd.print("  ");
+         lcd.setCursor(11,1);  lcd.print("R:"); lcd.print(adcdeg430); lcd.print("  ");
+         delay(bounciness);
+         //continue;
+      }
+      else {
+         //lcd.setCursor(0, 0);  lcd.print("&&&&&&&&&&&&&&&&&&&&");
+         //lcd.setCursor(0, 1);  lcd.print("&&&&&&&&&&&&&&&&&&&&");
+         //lcd.setCursor(0, 2);  lcd.print("&&&&&&&&&&&&&&&&&&&&");
+         //lcd.setCursor(0, 3);  lcd.print("&&&&&&&&&&&&&&&&&&&&");
+         //buttons = 0;
+         //EL_msec = 0;
+         }
+   }
 }
 
 
@@ -486,8 +503,10 @@ void SetDate()
 void SetSpeed()
 {
    uint8_t buttons = 0;
+   EL_msec = 0;
    while(true)
    {
+      
       buttons = ReadButtons();
       int increment = 1000;
 
@@ -507,14 +526,19 @@ void SetSpeed()
          LOG_INTERVAL_USEC -= increment;
          delay(bounciness);
          }
-      snprintf(tShort,sizeof(tShort),"%02d:%02d:%02d", hour(), minute(), second());
+      
       double sampHz = (1/(LOG_INTERVAL_USEC/fsConvert));
-      lcd.setCursor(12, 0); lcd.print(tShort);// lcd.print(" ");
-      lcd.setCursor(0, 2); lcd.print("("); lcd.print(sampHz); lcd.print("Hz");lcd.print(")");
-      lcd.setCursor(0, 3); lcd.print("Fs: "); lcd.print(LOG_INTERVAL_USEC); lcd.print(" uSec");
-      lcd.setCursor(18,3); lcd.print("<>"); lcd.setCursor(19, 3);
       opVar = sampHz;
-      outString = opString[opState] + F(": ") + String(opVar) + '\n';
+      if (EL_msec > 600)
+      {
+         printTIMELCD();
+         lcd.setCursor(0, 2); lcd.print("("); lcd.print(opVar); lcd.print("Hz");lcd.print(")");
+         lcd.setCursor(0, 3); lcd.print("Fs: "); lcd.print(LOG_INTERVAL_USEC); lcd.print(" uSec");
+         lcd.setCursor(18,3); lcd.print("<>"); lcd.setCursor(19, 3);
+         outString = opString[opState] + F(": ") + String(opVar) + '\n';
+         EL_msec = 0;
+      }
+      
    }
 }
 
@@ -536,6 +560,7 @@ void SetSub()
    lcd.setCursor(0, 3);
    lcd.print(F("sub: "));
    uint8_t buttons = 0;
+   EL_msec = 0;
    while(true)
    {
       buttons = ReadButtons();
@@ -563,14 +588,18 @@ void SetSub()
       SubjectID = 0;
       }
       SID = SubjectID;
-      lcd.setCursor(5, 3);
-      lcd.print(SID);
-      lcd.print(" ");
-      lcd.setCursor(18, 3); lcd.print("<>"); lcd.setCursor(19, 3);
-      //opVar = SubjectID;
-      outString = opString[opState] + F(": ") + String(opVar) + '\n';
+      opVar = SID;
+      if (EL_msec > 600)
+      {
+         printTIMELCD();
+         lcd.setCursor(5, 3);
+         lcd.print(SID);
+         lcd.print(" ");
+         lcd.setCursor(18, 3); lcd.print("<>"); lcd.setCursor(19, 3);
+         outString = opString[opState] + F(": ") + String(opVar) + '\n';
+         EL_msec = 0;
+      }
    }
-   lcd.setCursor(19, 3);
 }
 
 
@@ -748,8 +777,8 @@ void WaitTrigger()
    snprintf(MM_BASE,sizeof(MM_BASE),"sub-%01d_ses-%01d_run-%01d", SID, SES, RUN);
    snprintf(MM,sizeof(MM),"sub-%01d_ses-%01d_run-%01d.csv", SID, SES, RUN);
    LOG_FILENAME = MM;
-   snprintf(tLong,sizeof(tLong),"%02d/%02d/%02d  %02d:%02d:%02d", month(), day(), year(), hour(), minute(), second());
-   lcd.setCursor(0, 0);  lcd.print(tLong);
+   //snprintf(tLong,sizeof(tLong),"%02d/%02d/%02d  %02d:%02d:%02d", month(), day(), year(), hour(), minute(), second());
+   //lcd.setCursor(0, 0);  lcd.print(tLong);
    lcd.setCursor(0, 1);  lcd.print(MM_BASE);
    lcd.setCursor(0, 2);  lcd.print("RUN: ");  lcd.print(RUN);  lcd.print(" ");
    lcd.setCursor(0, 2);  lcd.print(F("Initializing SD card"));
@@ -790,8 +819,8 @@ void WaitTrigger()
    }
 
 
-   file.println(MM_BASE);
    file.println(tLong);
+   file.println(MM_BASE);
    //const char *stringHeader[] = {"Sample","logTime-ms","Left-Orange","Right-Black"};
    String stringHeader[] = {"Sample","logTime-ms","Left-Orange","Right-Black"};
    for( unsigned int jj = 0; jj<=3; jj++)
@@ -843,7 +872,7 @@ void WaitTrigger()
    // todo make sure interrupt on trigger_pin
    while( (digitalReadFast(TRIGGER_INPUT_PIN)==LOW) )
    {
-      if (EL_msec > 5000)
+      if (EL_msec > 2020)
       {
          // Force Logging
          buttons = ReadButtons();
@@ -854,10 +883,7 @@ void WaitTrigger()
          if (buttons & BUTTON_LEFT) {
            opState = SET_VERIFY;
            return;}
-
-         lcd.setCursor(0, 0);
-         snprintf(tLong,sizeof(tLong),"%02d/%02d/%02d  %02d:%02d:%02d", month(), day(), year(), hour(), minute(), second());
-         lcd.print(tLong);
+         printTIMELCD();
          lcd.setCursor(19, 3);
          EL_msec = 0;
       }
@@ -874,10 +900,7 @@ void WaitTrigger()
 // ************************************************
 void LogData()
 {
-   snprintf(tShort,sizeof(tShort),"%02d:%02d:%02d", hour(), minute(), second());
-   
    //lcd.setCursor(0, 0);  lcd.print(F("Logging"));  lcd.print(" ");
-   lcd.setCursor(12,0);  lcd.print(tShort); lcd.print(" ");
    lcd.setCursor(7, 1);  lcd.print((char)symDegree);
    lcd.setCursor(18,1);  lcd.print((char)symDegree);
    lcd.setCursor(0, 1);  lcd.print("L:"); //lcd.print(adcdeg310); lcd.print("  ");
@@ -956,12 +979,7 @@ void LogData()
       uint8_t buttons = 0;
       while ( micros() < (logTime-40000) )
       {
-         //snprintf(tShort,sizeof(tShort),"%02d:%02d:%02d", hour(), minute(), second());
-         //lcd.setCursor(12,0);  lcd.print(tShort);
-         lcd.setCursor(2, 1);  lcd.print(adcdeg310);   lcd.print("  ");
-         lcd.setCursor(13,1);  lcd.print(adcdeg430);   lcd.print("  ");
-         lcd.setCursor(3, 2);  lcd.print(logTimeStamp/1000);
-         //lcd.setCursor(0, 3);  lcd.print(spareMicros); lcd.print("  "); 
+         EL_msec = 0;
          buttons = ReadButtons();
          if ((buttons & BUTTON_SELECT)
             && (buttons & BUTTON_LEFT))
@@ -983,9 +1001,17 @@ void LogData()
                errorValue = 965;
                RUN += 1;
                opState = ERROR_INFO;
-               //delay(MENU_DELAY);
                return;
             }
+         //if (EL_msec > 10)
+         //{
+            printTIMELCD();
+            lcd.setCursor(2, 1);  lcd.print(adcdeg310);   lcd.print("  ");
+            lcd.setCursor(13,1);  lcd.print(adcdeg430);   lcd.print("  ");
+            lcd.setCursor(3, 2);  lcd.print(logTimeStamp/1000);
+            //lcd.setCursor(0, 3);  lcd.print(spareMicros); lcd.print("  ");
+            EL_msec = 0;
+         //}
       } //end sleep while loop
 
       // Read ADC0 - about 17 usec on Teensy 4, Teensy 3.6 is faster.
@@ -1130,6 +1156,7 @@ void setup()
    lcd.createChar(2, byteDown);
    lcd.setBacklight(BLUE);
    lcd.blink();
+   printTIMELCD();
    lcd.setCursor(0, 1);
    lcd.print(F("    RoseLab fMRI    "));
    lcd.setCursor(19, 3);
@@ -1146,33 +1173,15 @@ void setup()
    // Initialize the variables
    LoadParameters();
    paramsSaved = 0;
-     // Run timer2 interrupt every 15 ms
-   //  TCCR2A = 0;
-   //  TCCR2B = 1<<CS22 | 1<<CS21 | 1<<CS20;
-     //Timer2 Overflow Interrupt Enable
-   //  TIMSK2 |= 1<<TOIE2;
 }
 
 
-// ************************************************
-// Timer Interrupt Handler
-// ************************************************
-/*
- SIGNAL(TIMER2_OVF_vect)
-{
-  if (opState == OFF)
-  {
-    digitalWrite(MeasurementP, LOW);  // make sure relay is off
-  }
-  else
-  {
-    DriveOutput();
-  }
-}
-*/
 
 
-/* put your main code here, to run repeatedly:
+
+
+
+// put your main code here, to run repeatedly:
 void loop()
 {
    while(ReadButtons() != 0)
@@ -1189,6 +1198,7 @@ void loop()
    lcd.setCursor(0, 0);
    lcd.setBacklight(opColor[opState]);
    lcd.print(opString[opState]);
+   printTIMELCD();
 
    switch (opState)
    {
@@ -1247,7 +1257,7 @@ void loop()
          break;
    }
 }
-*/
+
 
 
 
