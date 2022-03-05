@@ -8,7 +8,6 @@
 #include <TimeLib.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
 #include <Adafruit_I2CDevice.h>
 
 #include <stdio.h>
@@ -34,18 +33,6 @@ const int logInterval = 10000; // log every 10 seconds
 // ************************************************
 // Display Variables and constants
 // ************************************************
-// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-// The pins for I2C are defined by the Wire-library.
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
-#define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
-#define LOGO_HEIGHT   16
-#define LOGO_WIDTH    16
-//unsigned long ttt = 1551500792;
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire1, OLED_RESET);
-
-
 // These #defines make it easy to set the backlight color
 #define RED 0x1
 #define GREEN 0x2
@@ -53,14 +40,14 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire1, OLED_RESET);
 #define BLUE 0x4
 #define VIOLET 0x5
 #define TEAL 0x6
-// #define WHITE 0x7
-
+#define WHITE 0x7
+#define BUTTON_SHIFT BUTTON_SELECT
 // //!< Select button #define BUTTON_SELECT  0x01
 // //!< Right button  #define BUTTON_RIGHT   0x02
 // //!< Down button   #define BUTTON_DOWN    0x04
 // //!< Up button     #define BUTTON_UP      0x08
 // //!< Left button   #define BUTTON_LEFT    0x10
-#define BUTTON_SHIFT BUTTON_SELECT
+
 
 // define the degree symbol
 #define symDegree 223
@@ -171,7 +158,7 @@ uint32_t logTimeStamp = 1;
 uint32_t iii=0;
 uint32_t log_tzero_msec;
 uint32_t logTime;
-// Interval between points for 7.69230769 Hz = period of 130000 uSec f(Hz) = 1 / T
+// Interval between points uSec f(Hz) = 1 / T
 u_int32_t LOG_INTERVAL_USEC = 100000;
 double sampHz;// 1/(LOG_INTERVAL_USEC/fsConvert);
 double fsConvert = 1000000;// usec to sec
@@ -184,7 +171,7 @@ FsFile file;
 // RingBuf for File type FsFile.
 RingBuf<FsFile, RING_BUF_CAPACITY> rb;
 //total duration to auto-stop a run
-#define log_duration_msec 20000
+#define log_duration_msec 300000
 elapsedMillis EL_msec;
 
 
@@ -297,7 +284,6 @@ void dateTime(uint16_t* date, uint16_t* time) {
   *time = FS_TIME(hour(), minute(), second());
 }
 // ************************************************
-// ssd1306 ??
 // ************************************************
 void printTIMELCD() {
    //enum operatingState { TEST = 0,   OFF,   SET_DATE, SET_SPEED, SET_SUB, SET_SES, SET_RUN,  SET_VERIFY,  WAIT_TRIGGER,       LOG_DATA,      ERROR_INFO };
@@ -709,7 +695,7 @@ void SetRun()
       lcd.setCursor(18, 3); lcd.print("<>"); lcd.setCursor(19, 3);
       opVar = RUN;
       outString = opString[opState] + F(": ") + String(opVar) + '\n';
-      //Serial.print(outString);
+      //SerialUSB1.print(outString);
    }
    lcd.setCursor(19, 3);
 }
@@ -921,7 +907,7 @@ void LogData()
    logTime = micros();
    
    // Log data until duration over or file full.
-   //              while (!Serial.available() || (logTimeStamp < (log_tzero_msec + log_duration_msec)) )
+   //              while (!SerialUSB1.available() || (logTimeStamp < (log_tzero_msec + log_duration_msec)) )
    //              while ( logTimeStamp < (log_tzero_msec + log_duration_msec) )
    // todo try elapsedMicros
    while ( logTimeStamp <= (log_duration_msec) )
@@ -1048,13 +1034,13 @@ void LogData()
   file.rewind();
   file.close();
   // Print first twenty lines of file.
-  Serial.println(errorCondition);
+  SerialUSB1.println(errorCondition);
   for (uint8_t n = 0; n < 20 && file.available();) {
     int c = file.read();
     if (c < 0) {
       break;
     }
-    Serial.write(c);
+    SerialUSB1.write(c);
     if (c == '\n') n++;
   }
   file.close();
@@ -1067,9 +1053,9 @@ void LogData()
   lcd.setCursor(0, 3);  lcd.print("minSM:");lcd.print(minSpareMicros);
   delay(4*MENU_DELAY);
   errorCondition = "(:     ! DONE !   :)";
-  Serial.println(errorCondition);
+  SerialUSB1.println(errorCondition);
   errorCondition = String(MM_BASE);
-  Serial.println(errorCondition);
+  SerialUSB1.println(errorCondition);
   //todo errorVar
   errorValue = (logTimeStamp/1000);
   RUN += 1;
@@ -1146,7 +1132,7 @@ void ErrorInfo()
 void setup()
 {
    // put your setup code here, to run once:
-   Serial.begin(9600);
+   SerialUSB1.begin(9600);
    setSyncProvider(getTeensy3Time);
    //put this next line *Right Before* any file open line: //todo check timestamps
    SdFile::dateTimeCallback(dateTime);
@@ -1189,7 +1175,7 @@ void loop()
       // waits for button release before changing state
    }
    outString = opString[opState] + F(": ") + String(opVar) + '\n';
-   Serial.print(outString);
+   SerialUSB1.print(outString);
    //int SID = SubjectID;
    //int SES = Session;
    //int RUN = Run;
