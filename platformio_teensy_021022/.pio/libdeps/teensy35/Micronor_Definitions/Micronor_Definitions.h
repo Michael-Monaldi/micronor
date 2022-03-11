@@ -114,6 +114,9 @@ uint16_t adcdeg310 = 1;
 uint16_t adcdeg430 = 1;
 short deg310 = 1;
 short deg430 = 1;
+short deg310_offset = 9999; //used to record the homed micronor output prior to experiment
+short deg430_offset = 9999; //used to record the homed micronor output prior to experiment
+boolean calibrated = false;
 // Scanner pulse from BNC cable
 #define TRIGGER_INPUT_PIN 39
 
@@ -162,6 +165,7 @@ double sampHz; // sampHz = 1/(LOG_INTERVAL_USEC/fsConvert)   f(Hz) = 1 / T
 int sampHz_int;
 int32_t spareMicros;
 double fsConvert = 1000000;   // usec to sec
+#define fsADC 359/1023
 SdFs sd;
 FsFile file;
 RingBuf<FsFile, RING_BUF_CAPACITY> rb; // RingBuf for File type FsFile.
@@ -169,7 +173,8 @@ RingBuf<FsFile, RING_BUF_CAPACITY> rb; // RingBuf for File type FsFile.
 elapsedMillis EL_msec;
 uint32_t delta = 0;
 uint32_t start = 0;
-elapsedMicros t_usec;
+elapsedMicros EL_usec;
+elapsedMicros loop_EL_usec;
 int pcount = 0;
 
 
