@@ -46,6 +46,8 @@
 // flags for function set
 #define LCD_8BITMODE 0x10 //!< LCD 8 bit mode
 #define LCD_4BITMODE 0x00 //!< LCD 4 bit mode
+#define LCD_4LINE 0x09
+#define LCD_REBIT 0x04
 #define LCD_2LINE 0x08    //!< LCD 2 line mode
 #define LCD_1LINE 0x00    //!< LCD 1 line mode
 #define LCD_5x10DOTS 0x04 //!< 10 pixel high font mode
@@ -213,7 +215,7 @@ private:
   uint8_t _initialized;
 
   uint8_t _numlines, _currline;
-
+  uint8_t _numcols;
   uint8_t _i2cAddr;
   Adafruit_MCP23017 _i2c;
 };

@@ -66,7 +66,7 @@ Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
 // States for state machine
 // ************************************************
 enum operatingState  {TEST = 0,  OFF,    SET_DATE,   SET_SPEED,  SET_SUB,  SET_SES,  SET_RUN,  SET_VERIFY,  WAIT_TRIGGER,   LOG_DATA,     ERROR_INFO  };
-unsigned int opColor[]={RED,    TEAL,    TEAL,      TEAL,         TEAL,      TEAL,      TEAL,      GREEN,       VIOLET,          GREEN,            RED    };
+unsigned int opColor[]={RED,    TEAL,    TEAL,      TEAL,         TEAL,      TEAL,      TEAL,      TEAL,       BLUE,          GREEN,            RED    };
 String opString[] = {"TESTING!", "OFF", "SET_DATE", "SET_SPEED",  "SET_SUBJECT","SET_SESSION","SET_RUN","SET_VERIFY","WAIT_TRIGGER", "Recording",    "ERROR_INFO"};
 String opVarStr[] = {" FIXME  ", "OFF=",  "DATE="   , "sampHz=",  "SID="        ,"SES="      ,"RUN="   ,"  LoguSec= "   ,"  WAITING? " , "  LOG_DATA "  ,    "ErrVar="};
 operatingState opState = OFF;
@@ -144,7 +144,7 @@ uint32_t logTimeStamp =         1;
 uint32_t i_samp =               0;
 uint32_t log_tzero_msec;
 uint32_t logTime;
-u_int32_t LOG_INTERVAL_USEC =   50000;  // Interval between points uSec
+u_int32_t LOG_INTERVAL_USEC =   10000;  // Interval between points uSec
 double sampHz; // sampHz = 1/(LOG_INTERVAL_USEC/fsConvert)   f(Hz) = 1 / T
 int sampHz_int;
 int32_t spareMicros;
@@ -161,6 +161,6 @@ elapsedMicros loop_EL_usec;
 int pcount =                    0;
 uint32_t delta =                0;
 uint32_t start =                0;
-
+String newString;// = ((String) tShort +"L: " +deg310 + "R: " +deg430 +"  t:" +(logTimeStamp/1000));
 
 #define ISNAN(XX) (!((XX)==(XX))) // special isnan function for comparing ints / floats / doubles I THINK - unused

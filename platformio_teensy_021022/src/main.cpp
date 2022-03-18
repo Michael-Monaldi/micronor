@@ -126,14 +126,17 @@ void printTimeLCD() {
    snprintf(tShort,sizeof(tShort),"%02d:%02d:%02d", hour(), minute(), second());
    switch (opState)
    {
+      case LOG_DATA:
+         lcd.setCursor(0,2); 
+         newString = F("L:") +String(deg310) +char(symDegree) +F(" R:") +String(deg430) +char(symDegree) +F(" t:") +String(logTimeStamp/1000);
+         lcd.print(newString);
+         //lcd.setCursor(12,0);   lcd.print(tShort);  lcd.print(deg310); lcd.print(" "); lcd.print(deg430); lcd.print(" "); lcd.print(logTimeStamp/1000);
+         break;
       case OFF:
          lcd.setCursor(0, 0);   lcd.print(tLong);   lcd.setCursor(19,3);
          break;
       case WAIT_TRIGGER:
          lcd.setCursor(0, 0);   lcd.print(tLong);   lcd.setCursor(19,2);
-         break;
-      case LOG_DATA:
-         lcd.setCursor(12,0);   lcd.print(tShort);
          break;
       case SET_DATE:
          lcd.setCursor(0, 1);   lcd.print(tLong);
@@ -166,27 +169,28 @@ void printAngles(uint16_t LEFT, uint16_t RIGHT) {
       else if (VAL>10  && VAL<100)  {lcd.print(F("  ")); }
       else if (VAL>100 && VAL<1000) {lcd.print(F(" ")); } 
       lcd.print(VAL);
-      lcd.print((char)symDegree);
+      //lcd.print((char)symDegree);
    }
 }
 
 
 
 
-void printDigitLCD(uint8_t cx, uint8_t ry, uint32_t VAL, uint8_t padding) {
-   const String pad_vector[] = {
+void printDigitLCD(uint8_t cx, uint8_t ry, double VAL, uint8_t padding) {
+   int decimals = 1;
+   const String pad_vector[] = {'\0',
    " ",
    "  ",
    "   ",
    "    ",
    "     ",
    "      "};
-   if (cx >19 || ry >3 ) { lcd.clear();  lcd.setCursor(0, 0); lcd.print(F("LIMIT c<=20 & r<=3 ")); }
+   if (cx >19 || ry >3 ) { lcd.clear();  lcd.setCursor(0, 0); lcd.print(F("LIMIT c<=19 & r<=3 ")); }
    else if (padding!=0)
    {
       lcd.setCursor(cx, ry);
       lcd.print(pad_vector[padding]);
-      lcd.print(VAL);
+      lcd.print(VAL, decimals);
    }
    else
    {
@@ -199,6 +203,7 @@ void printDigitLCD(uint8_t cx, uint8_t ry, uint32_t VAL, uint8_t padding) {
       //else if (VAL>=100000  && VAL<1000000) {lcd.print(F(" "));}
       //else if (VAL>=1000000)                {           }     
       lcd.print(VAL);
+      //lcd.print(VAL, decimals);
       lcd.print(" ");
    }
    //lcd.noAutoscroll();
@@ -280,7 +285,8 @@ void Test()
             adcdeg430 = analogRead(MR430_IN);  deg430 = adcdeg430*fsADC;      
             opVar = ( (deg310 + deg430) / 2);
             printAngles(deg310, deg430);
-            printDigitLCD(5, 1, opVar, 0); 
+            printDigitLCD(5, 1, opVar, 1);
+            printDigitLCD(5, 0, DATE+0.05, 2); 
             outString = opString[opState] + F("---") + opVarStr[opState] + String(opVar) + F("   L:") + String(deg310) + F("  R:") + String(deg430) + F("  EL_usec:") + String(EL_usec) + '\n';
             SerialUSB1.print(outString);
             delay(2*bounciness);
@@ -309,9 +315,9 @@ void Off()
    lcd.setCursor(0, 0);  lcd.print(F("BNC cable, SD card &"));
    lcd.setCursor(0, 1);  lcd.print(F(" BOTH Fiber Optics  "));
    lcd.setCursor(0, 2);  lcd.print(F(" All plugged in ?? "));
-   delay(MENU_DELAY/4);
+   delay(2*bounciness);
    lcd.setCursor(0, 3);  lcd.print(F("To calibrate hit OK"));
-   delay(MENU_DELAY/4);
+   delay(2*bounciness);
 
    buttons = 0;
    while(true)
@@ -323,20 +329,17 @@ void Off()
          lcd.clear();
          printTimeLCD();
          lcd.setCursor(0, 1);  lcd.print(F("CALIBRATING"));
+         lcd.setCursor(6, 2);  lcd.print((char)symDegree);
+         lcd.setCursor(6, 3);  lcd.print((char)symDegree);
          digitalWrite(MR310_RST, HIGH);
          digitalWrite(MR430_RST, HIGH);
-         lcd.print(" . ");
-         delay(PRINT_DELAY);
-         lcd.print(". ");
-         delay(PRINT_DELAY);
-         lcd.print(". ");
+         lcd.print(" . ");    delay(PRINT_DELAY);    lcd.print(". ");    delay(PRINT_DELAY);
          digitalWrite(MR430_RST, LOW);
          digitalWrite(MR310_RST, LOW);
-         delay(PRINT_DELAY);
-         lcd.print(".");
+         lcd.print(". ");    delay(PRINT_DELAY);    lcd.print(". ");
          pcount = 0;
-         while (pcount < 10) {
-            if (EL_msec > PRINT_DELAY/2) {
+         while (pcount < 5) {
+            if (EL_msec > PRINT_DELAY/4) {
                adcdeg310 = analogRead(MR310_IN);  deg310 = adcdeg310*fsADC;  deg310_offset = deg310;  
                adcdeg430 = analogRead(MR430_IN);  deg430 = adcdeg430*fsADC;  deg430_offset = deg430;
                printTimeLCD();
@@ -345,31 +348,33 @@ void Off()
                EL_msec = 0;
             }
          }
+         pcount = 0;
          if ( (deg310_offset <10) && (deg430_offset <10) ) {
             calibrated = true;
-            printAngles(deg310_offset, deg430_offset);
-            lcd.setCursor(6, 2);  lcd.print((char)symDegree);
-            lcd.setCursor(6, 3);  lcd.print((char)symDegree);
             lcd.setBacklight(GREEN);
+            printAngles(deg310_offset, deg430_offset);
+            //lcd.setCursor(6, 2);  lcd.print((char)symDegree);
+            //lcd.setCursor(6, 3);  lcd.print((char)symDegree);
             lcd.setCursor(0, 1);  lcd.print(F("Calibration Success!"));
             while(ReadButtons()==0)
-            {if (EL_msec > PRINT_DELAY) {printTimeLCD(); EL_msec = 0;}}
-            lcd.setCursor(0, 1);  lcd.write(symUp);  lcd.write(symDown);  lcd.print(F(" to Change Values"));
+               {if (EL_msec > PRINT_DELAY) {printTimeLCD(); EL_msec = 0;}}
+            lcd.setCursor(0, 1);  lcd.write(symUp);  lcd.write(symDown);  lcd.print(F(" to Change Values "));
             lcd.setCursor(0, 2);  lcd.print(F("<> to Navigate Menus"));
-            lcd.setCursor(0, 3);  lcd.print(F("To Proceed Press   >"));
+            lcd.setCursor(0, 3);  lcd.print(F("To Proceed Press  >"));
             delay(PRINT_DELAY);
+            //opState = SET_DATE???
          }
          else {
             calibrated = false;
-            printAngles(deg310_offset, deg430_offset);
             lcd.setBacklight(RED);
+            printAngles(deg310_offset, deg430_offset);
             lcd.setCursor(0, 1);  lcd.print(F("CALIBRATION FAILED"));
-            lcd.setCursor(6, 2);  lcd.print((char)symDegree);
-            lcd.setCursor(6, 3);  lcd.print((char)symDegree);
+            //lcd.setCursor(6, 2);  lcd.print((char)symDegree);
+            //lcd.setCursor(6, 3);  lcd.print((char)symDegree);
             lcd.setCursor(7, 2);  lcd.print(F(" Proceed    >"));
             lcd.setCursor(7, 3);  lcd.print(F(" Retry Hit OK"));
             while(ReadButtons()==0)
-            {if (EL_msec > PRINT_DELAY) {printTimeLCD(); EL_msec = 0;}}
+               {if (EL_msec > PRINT_DELAY) {printTimeLCD(); EL_msec = 0;}}
          }
       }
       if (buttons & BUTTON_LEFT) {
@@ -430,6 +435,7 @@ void SetDate()
          lcd.setCursor(18,3);  lcd.print("<>");
          outString = opString[opState] + F("---") + opVarStr[opState] + String(opVar) + '\n';
          SerialUSB1.print(outString);
+         EL_msec = 0;
       }
       
    }
@@ -447,9 +453,8 @@ void SetDate()
 void SetSpeed()
 {
 
-   lcd.setCursor(0, 2);  lcd.print("   uSec    (Hz)  ");
-   lcd.setCursor(0, 3);  lcd.print("Fs: ");
-   lcd.setCursor(18,3);  lcd.print("<>");
+   lcd.setCursor(0, 2);  lcd.print("    uSec     (Hz)   ");
+   lcd.setCursor(0, 3);  lcd.print("Fs:               <>");
    
 
    EL_msec = 0;
@@ -458,7 +463,7 @@ void SetSpeed()
    while(true)
    {
       buttons = ReadButtons();
-      increment = 10000;
+      increment = 100;
 
       if (buttons & BUTTON_SELECT) {
         increment /= 10;}
@@ -481,12 +486,12 @@ void SetSpeed()
       
       if (buttons)
          {
-            printDigitLCD(10, 3, opVar, 0);
-            printDigitLCD(4, 3, LOG_INTERVAL_USEC, 0);
-            outString = opString[opState] + F("---") + opVarStr[opState] + String(opVar) + '\n';
+            printDigitLCD(10, 3, sampHz, 2);
+            printDigitLCD(3, 3, LOG_INTERVAL_USEC, 0);
+            outString = opString[opState] + F("---USEC=") +LOG_INTERVAL_USEC +F("---") +opVarStr[opState] + String(sampHz) + '\n';
             SerialUSB1.print(outString);
          }
-      if (EL_msec > PRINT_DELAY) {printTimeLCD();EL_msec = 0;  printDigitLCD(10, 3, opVar, 0);  printDigitLCD(4, 3, LOG_INTERVAL_USEC, 0);}
+      if (EL_msec > PRINT_DELAY) {printTimeLCD();EL_msec = 0;  printDigitLCD(10, 3, sampHz, 2);  printDigitLCD(3, 3, LOG_INTERVAL_USEC, 0);}
    }
 }
 
@@ -563,8 +568,8 @@ void SetSes()
    {
       buttons = ReadButtons();
       increment = 1;
-      //if (buttons & BUTTON_SELECT) {
-         //increment *= 10;}
+      if (buttons & BUTTON_SELECT) {
+         lcd.clear();}
       if (buttons & BUTTON_LEFT) {
          opState = SET_SUB;
          return;}
@@ -662,7 +667,6 @@ void SetRun()
 /**********************************************************************/
 void SetVerify()
 {
-   //double sampHz = (1/(LOG_INTERVAL_USEC/fsConvert));
    snprintf(MM_BASE,sizeof(MM_BASE),"sub-%03d_ses-%01d_run-%01d", SID, SES, RUN);
    lcd.setCursor(0, 1);  lcd.print(MM_BASE);
    lcd.setCursor(0, 2);  lcd.print(F("EVERYTHING CORRECT ?"));
@@ -756,9 +760,11 @@ void WaitTrigger()
    file.println(MM_BASE);
    file.print(F("MR310 (Left-Orange) reset point: "));  file.println(deg310_offset);
    file.print(F("MR430 (Right-Black) reset point: "));  file.println(deg430_offset);
+   file.println((String) "Sampling Period" +LOG_INTERVAL_USEC +" microseconds");
+   file.println((String) "Sampling Rate  " +sampHz +" Hertz approx");
    file.println("");
 
-   String stringHeader[] = {"Sample","logTime-ms","Left-Orange","Right-Black"};
+   String stringHeader[] = {"Sample","logTime-ms","Left","Right"};
    for(unsigned int jj = 0; jj<=3; jj++)
    {
       //data[jj] = analogRead( A0 + i);
@@ -782,8 +788,10 @@ void WaitTrigger()
 
  
    
-   lcd.setCursor(0, 3);  lcd.print(F("TO FORCE:  hold 'OK'"));
-   lcd.setCursor(0, 2);  lcd.print(F("Waiting for Trigger"));
+   lcd.setCursor(0, 3);  lcd.print(F("FORCE: hold OK 2sec"));
+   lcd.setCursor(0, 2);  lcd.print(F("Waiting for Trigger "));
+   lcd.setCursor(19,2);
+   SerialUSB1.println("                                              READY");
 
    EL_msec = 0;
    buttons = 0;
@@ -817,11 +825,11 @@ void LogData()
 {
    //lcd.setCursor(0, 0);  lcd.print("t0:"); lcd.print(log_tzero_msec/1000); lcd.print(" sec");
    lcd.setCursor(0, 1);  lcd.print(MM_BASE);
-   lcd.setCursor(6, 2);  lcd.print((char)symDegree);
-   lcd.setCursor(6, 3);  lcd.print((char)symDegree);
-   lcd.setCursor(12,3);  lcd.print("t :");
-   printAngles(deg310, deg430);
-   
+   //lcd.setCursor(0, 2);  lcd.print("L:");   lcd.setCursor(6, 2);  lcd.print((char)symDegree);
+   //lcd.setCursor(0, 3);  lcd.print("R:");   lcd.setCursor(6, 3);  lcd.print((char)symDegree);
+   //lcd.setCursor(12,3);  lcd.print("t:");
+   //printAngles(deg310, deg430);
+   //outString = F("");
    rb.begin(&file);// initialize the RingBuf.
    size_t maxUsed = 0;// Max RingBuf used bytes. Useful to understand RingBuf overrun.
    int32_t minSpareMicros = INT32_MAX;// Min spare micros in loop.
@@ -837,6 +845,7 @@ void LogData()
    // todo try elapsedMicros
    while ( logTimeStamp < log_duration_msec )// Log data until duration over
    {
+      loop_EL_usec = 0;
       size_t n = rb.bytesUsed();// Amount of data in ringBuf.
       if ((n + file.curPosition()) > (LOG_FILE_SIZE - 20)) { //check if file full.
          errorCondition = "File full - EXITING ";    errorValue = 830;    opState = ERROR_INFO;    errorState = true;
@@ -854,7 +863,7 @@ void LogData()
             return;
          }
       }
-      //SerialUSB1.println("### TIME_RB " +String(loop_EL_usec) + " ###"); loop_EL_usec = 0;
+
       // Time for next point.
       logTime += LOG_INTERVAL_USEC;
       spareMicros = logTime - micros();
@@ -867,24 +876,36 @@ void LogData()
       if (spareMicros <= 0) {
            errorCondition = "spareMicrosNegative";    errorValue = spareMicros;    opState = ERROR_INFO;    errorState = true;
            SerialUSB1.println((String)"LOG_INT_USEC" + "---" + "sampHz"  + "---" + "neg:spareMicros" + "---" + "minSpare"    + "---" + "logTime");
-           outString =    ((String)LOG_INTERVAL_USEC +"  ---  "    +sampHz_int +"  ---  "    +spareMicros        +"  ---  "    +minSpareMicros +"  ---  "    +logTime    +'\n');
+           outString =    ((String)LOG_INTERVAL_USEC +"  ---  "    +sampHz +"  ---  "    +spareMicros        +"  ---  "    +minSpareMicros +"  ---  "    +logTime    +'\n');
            //outString = opString[opState] + F("---") + opVarStr[opState] + errorCondition + "=" + String(errorValue) + F("   minSpare=") + minSpareMicros + '\n';
            SerialUSB1.print(outString);
            RUN += 1;
            return;// todo? write to rb??
       }
-      //SerialUSB1.println("### 861 TIME_CHECKING_SPARE " +String(loop_EL_usec) + " ###"); 
       
+      
+
+
       // SLEEP until time to log data.
+      outString = F("t:") + String(logTimeStamp/1000) + F("    L: ") +String(deg310) +F("   R: ") +String(deg430);
+      
       buttons = 0;
-      if ( (i_samp>=1000) && (i_samp % 1000 == 0 ) ) {
+      loop_EL_usec = 0;
+      if ( EL_msec > bounciness ) {
+    //   if ( (i_samp>=1000) && (i_samp % 1000 == 0 ) ) {
          refreshNeeded = true;
+         SerialUSB1.println(outString);
+         //SerialUSB1.println(outString);
+         //printTimeLCD();
+         //printAngles(deg310, deg430);
+         
+         EL_msec = 0;
       }
-      while ( micros() < (logTime-10000) )     //while ( micros() < (logTime-40000) )//todo elapseMicros instead of a call to micros
+      while ( micros() < (logTime-8000) )     //while ( micros() < (logTime-40000) )//todo elapseMicros instead of a call to micros
       {
          //if ( loop_EL_usec < (LOG_INTERVAL_USEC-2500) )
          if (refreshNeeded)
-         {  
+         {  loop_EL_usec = 0;
             buttons = ReadButtons();
             refreshNeeded = false;
             // Force QUIT & Write any RingBuf data to file.
@@ -893,21 +914,27 @@ void LogData()
                   file.truncate();  file.rewind(); file.close();
                   errorCondition = "     FORCE QUIT     ";    errorValue = minSpareMicros;    opState = ERROR_INFO;    errorState = true;
                   outString = opString[opState] + F("---") + opVarStr[opState] + errorCondition + String(errorValue) + '\n';
-                  SerialUSB1.print(outString);
+                  //SerialUSB1.print(outString);
                   RUN += 1;
                   return;
             }
-            SerialUSB1.println(String(i_samp) +"      I AM ASLEEP         " +String(loop_EL_usec));
-            //if (EL_msec > MENU_DELAY) {
-               printAngles(deg310, deg430);
+            
+               //if (EL_msec > MENU_DELAY) {
+         //printTimeLCD();
+         //printAngles(deg310, deg430);
                //lcd.setCursor(15,3);  lcd.print(logTimeStamp/1000);
-               printTimeLCD();
-               EL_msec = 0;
-            //   refreshNeeded = false;
-            //}
+               //EL_msec = 0;
+               //   refreshNeeded = false;
+               //}
+        // SerialUSB1.println(String(i_samp) +"     PRINTING_TIME                        " +String(loop_EL_usec) +"  " +String(i_samp));
          }
       } //end sleep while loop
-      SerialUSB1.println(String(i_samp) +" ### TIME_SLEEPING ###   " +String(loop_EL_usec));
+
+
+
+      //SerialUSB1.println(adcdeg310 +"-------------" +adcdeg430);
+
+      //SerialUSB1.println(String(i_samp) +" ### TIME_SLEEPING      " +String(loop_EL_usec) +"   " +String(minSpareMicros));
       loop_EL_usec = 0;
       refreshNeeded = false;
 
@@ -923,9 +950,11 @@ void LogData()
          RUN += 1;
          return;
       }
-      //SerialUSB1.println("### 908 TIME_WRITING " +String(loop_EL_usec) + " ###");
+      //SerialUSB1.println("###     TIME_WRITING     " +String(loop_EL_usec));
     //end log duration loop
    }
+
+
 
 
    // Write LAST RingBuf data to file.
@@ -1040,14 +1069,17 @@ void setup()
    SdFile::dateTimeCallback(dateTime);
    // Initialize LCD DiSplay
    lcd.begin(20, 4);
-   lcd.createChar(1, byteUp); // create degree symbol from the binary
-   lcd.createChar(2, byteDown);
+   lcd.createChar(1, byteUp); //create upArrow symbol from the binary
+   lcd.createChar(2, byteDown); //create upArrow symbol from the binary
    lcd.setBacklight(BLUE);
    lcd.blink();
+   
+   lcd.setCursor(19, 0);   lcd.print(F("A"));  delay(PRINT_DELAY);   lcd.print(F("1 (2)?")); delay(PRINT_DELAY); 
+   lcd.setCursor(19, 1);   lcd.print(F("B"));  delay(PRINT_DELAY);   lcd.print(F("2 (3)?")); delay(PRINT_DELAY); 
+   lcd.setCursor(19, 2);   lcd.print(F("C"));  delay(PRINT_DELAY);   lcd.print(F("3 (4)?")); delay(PRINT_DELAY); 
+   lcd.setCursor(19, 3);   lcd.print(F("D"));  delay(PRINT_DELAY);   lcd.print(F("0 (1)?")); delay(PRINT_DELAY); 
+   //abcdefghijklmnopqrst"));//09876543210987654321ABCDEFGHIJKLMNOPQRST"));
    printTimeLCD();
-   lcd.setCursor(0, 1);
-   lcd.print(F("x   RoseLab fMRI   x"));
-   lcd.setCursor(19, 3);
    // Initialize PINS:
    pinMode(MR310_IN, INPUT_PULLDOWN);
    pinMode(MR430_IN, INPUT_PULLDOWN);
@@ -1057,7 +1089,7 @@ void setup()
    // make sure pins are off to start
    digitalWrite(MR310_RST, LOW);
    digitalWrite(MR430_RST, LOW);
-   delay(2*MENU_DELAY);
+   delay(MENU_DELAY);
    // Initialize the variables
    LoadParameters();
    paramsSaved = false;
@@ -1072,11 +1104,9 @@ void setup()
 // put your main code here, to run repeatedly:
 void loop()
 {
-   while(ReadButtons() != 0)
-   {  }  // waits for button release before changing state
-   outString = opString[opState] + F("---") + opVarStr[opState] + String(opVar) + '\n';
-   SerialUSB1.print(outString);
-
+   while(ReadButtons() != 0)// waits for button release before changing state
+   {  }
+   //outString = opString[opState] + F("---") + opVarStr[opState] + String(opVar) + '\n';
    increment = 1;
    lcd.clear();
    lcd.setBacklight(opColor[opState]);
@@ -1128,12 +1158,11 @@ void loop()
          log_tzero_msec = millis();
          break;
       case ERROR_INFO:
-         lcd.setCursor(0, 0);  lcd.print(opString[opState]); 
          lcd.setCursor(0, 1);  lcd.print(F(MM_BASE));
          lcd.setCursor(0, 2);  lcd.print(errorValue);  
          lcd.setCursor(0, 3);  lcd.print(String(errorCondition));
          lcd.setCursor(19,3);
-         delay(2*MENU_DELAY);
+         delay(PRINT_DELAY);
          ErrorInfo();
          break;
    }

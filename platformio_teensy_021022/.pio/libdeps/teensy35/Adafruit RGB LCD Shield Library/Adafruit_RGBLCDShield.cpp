@@ -63,7 +63,7 @@
 Adafruit_RGBLCDShield::Adafruit_RGBLCDShield() {
   _i2cAddr = 0;
 
-  _displayfunction = LCD_4BITMODE | LCD_1LINE | LCD_5x8DOTS;
+  _displayfunction = LCD_4BITMODE | LCD_4LINE | LCD_5x8DOTS;
 
   // the I/O expander pinout
   _rs_pin = 15;
@@ -109,11 +109,11 @@ void Adafruit_RGBLCDShield::init(uint8_t fourbitmode, uint8_t rs, uint8_t rw,
   _pinMode(_enable_pin, OUTPUT);
 
   if (fourbitmode)
-    _displayfunction = LCD_4BITMODE | LCD_1LINE | LCD_5x8DOTS;
+    _displayfunction = LCD_4BITMODE | LCD_4LINE | LCD_5x8DOTS;
   else
-    _displayfunction = LCD_8BITMODE | LCD_1LINE | LCD_5x8DOTS;
-
-  begin(16, 1);
+    _displayfunction = LCD_8BITMODE | LCD_4LINE | LCD_5x8DOTS;
+  //SerialUSB1.println(_displayfunction);
+  begin(20, 4);
 }
 
 void Adafruit_RGBLCDShield::begin(uint8_t cols, uint8_t lines,
@@ -143,10 +143,13 @@ void Adafruit_RGBLCDShield::begin(uint8_t cols, uint8_t lines,
     }
   }
 
-  if (lines > 1) {
+  if (lines > 2) {
+    _displayfunction |= LCD_4LINE;}
+  else if (lines > 1) {
     _displayfunction |= LCD_2LINE;
   }
   _numlines = lines;
+  _numcols = cols;
   _currline = 0;
 
   // for some 1 line displays you can select a 10 pixel high font
@@ -219,6 +222,7 @@ void Adafruit_RGBLCDShield::begin(uint8_t cols, uint8_t lines,
 
 /********** high level commands, for the user! */
 void Adafruit_RGBLCDShield::clear() {
+  //SerialUSB1.println(_displayfunction);
   command(LCD_CLEARDISPLAY); // clear display, set cursor position to zero
   delayMicroseconds(2000);   // this command takes a long time!
 }
@@ -230,6 +234,11 @@ void Adafruit_RGBLCDShield::home() {
 
 void Adafruit_RGBLCDShield::setCursor(uint8_t col, uint8_t row) {
   int row_offsets[] = {0x00, 0x40, 0x14, 0x54};
+  //int row_offsets[] = {0x00, 0x40, 0x10, 0x50};
+  //if(_numcols == 20) {
+  //  row_offsets[2] = 0x14;
+  //  row_offsets[3] = 0x54;
+  //}
   if (row > _numlines) {
     row = _numlines - 1; // we count rows starting w/0
   }
