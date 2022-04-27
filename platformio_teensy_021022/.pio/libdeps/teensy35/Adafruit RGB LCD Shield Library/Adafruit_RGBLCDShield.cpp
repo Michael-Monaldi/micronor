@@ -63,7 +63,7 @@
 Adafruit_RGBLCDShield::Adafruit_RGBLCDShield() {
   _i2cAddr = 0;
 
-  _displayfunction = LCD_4BITMODE | LCD_4LINE | LCD_5x8DOTS;
+  _displayfunction = LCD_4BITMODE | LCD_2LINE | LCD_5x8DOTS;
 
   // the I/O expander pinout
   _rs_pin = 15;
@@ -109,9 +109,9 @@ void Adafruit_RGBLCDShield::init(uint8_t fourbitmode, uint8_t rs, uint8_t rw,
   _pinMode(_enable_pin, OUTPUT);
 
   if (fourbitmode)
-    _displayfunction = LCD_4BITMODE | LCD_4LINE | LCD_5x8DOTS;
+    _displayfunction = LCD_4BITMODE | LCD_2LINE | LCD_5x8DOTS;
   else
-    _displayfunction = LCD_8BITMODE | LCD_4LINE | LCD_5x8DOTS;
+    _displayfunction = LCD_8BITMODE | LCD_2LINE | LCD_5x8DOTS;
   //SerialUSB1.println(_displayfunction);
   begin(20, 4);
 }

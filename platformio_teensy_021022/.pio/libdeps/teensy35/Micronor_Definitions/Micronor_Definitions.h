@@ -1,5 +1,5 @@
 // Micronor fMRI Data Logger - Michael Monaldi
-
+// Inspiration, explanation of C syntax, and debugging assistance provided by my friend and colleague, Pedro Tirado
 // #include <Arduino.h>
 #ifndef Micronor_Definitions_h
 #define Micronor_Definitions_h
@@ -138,7 +138,7 @@ boolean refreshNeeded =         true;
 //#define SD_CONFIG SdioConfig(BUILTIN_SDCARD)//new
 #define LOG_FILE_SIZE           10*2500*600  // 1,500,000 bytes.   //Size to log 10 byte lines at 2.5 kHz for more than ten minutes.
 #define RING_BUF_CAPACITY       400*512   // Space to hold more than 800 ms of data for 10 byte lines at 25 ksps.
-#define log_duration_msec       330000 //330000 total duration to auto-stop a run
+#define log_duration_msec       305000 //330000 total duration to auto-stop a run
 #define fsADC                   359/1023
 uint32_t logTimeStamp =         1;
 uint32_t i_samp =               0;
