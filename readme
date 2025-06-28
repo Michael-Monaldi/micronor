@@ -1,10 +1,9 @@
-xxx configure MR430 to match MR310
-xxx test homing
-xxx add LCD or 2 LCDs
-xxx DIN rail // cutting board
-    pullup / pulldown resistors
-
-    wait for 5 from keyboard
+[x] configure MR430 to match MR310
+[x] test homing
+[x] add LCD or 2 LCDs
+[x] DIN rail // cutting board
+[ ] pullup / pulldown resistors
+[ ] wait for 5 from keyboard
     >> send 5 to eprime
     >> HIGH to homingPin_R & homingPin_L >> delay >> LOW
     >> begin txt / csv
